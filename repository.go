@@ -200,6 +200,9 @@ func (r *Repository) AddFile(filePath string) error {
 // ExtractFile extracts a file from the repository
 func (r *Repository) ExtractFile() error {
 	header, err := r.tarReader.Next()
+	if err == io.EOF {
+		return err
+	}
 	if err != nil {
 		log.Printf("Repository#ExtractFile - Failed to extract file from repository: %v", err)
 		return err
