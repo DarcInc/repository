@@ -93,6 +93,51 @@ func (r *WriteRepository) writeSignature(repoFile io.Writer) error {
 	return nil
 }
 
+// Seal completes writing the data and closes the repository
+func (r *WriteRepository) Seal() error {
+	if err := r.tarWriter.Flush(); err != nil {
+		log.Printf("Repository#Seal - Failed to flush the tar writer.")
+	}
+
+	return nil
+}
+
+// AddFile adds data from a file
+func (r *WriteRepository) AddFile(filePath string) error {
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		log.Printf("Repository#AddFile - Unable to stat file %s: %v", filePath, err)
+		return err
+	}
+
+	header, err := tar.FileInfoHeader(fileInfo, filePath)
+	if err != nil {
+		log.Printf("Repository#AddFile - Unable create new info header for file %s: %v", filePath, err)
+		return err
+	}
+
+	err = r.tarWriter.WriteHeader(header)
+	if err != nil {
+		log.Printf("Repository#AddFile - Unable to write header into file %s: %v", filePath, err)
+		return err
+	}
+
+	infile, err := os.Open(filePath)
+	if err != nil {
+		log.Printf("Repository#AddFile - Unable to open input file %s: %v", filePath, err)
+		return err
+	}
+	defer infile.Close()
+
+	_, err = io.Copy(r.tarWriter, infile)
+	if err != nil {
+		log.Printf("Repository#AddFile - Failed to copy data from input file to tar writer %s: %v", filePath, err)
+		return err
+	}
+
+	return nil
+}
+
 // CreateRepository creates a new repository with the given filename
 //
 // AesKey contains the random AES encryption key
@@ -184,70 +229,6 @@ func (r *ReadRepository) verifySignature(repoFile io.Reader) error {
 	return nil
 }
 
-// OpenRepository opens a repository for reading
-func OpenRepository(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, repoFile io.Reader) (*ReadRepository, error) {
-	result := &ReadRepository{}
-	result.privateKey = privateKey
-	result.publicKey = publicKey
-	var err error
-
-	if err = result.readHeader(repoFile); err != nil {
-		log.Printf("Repository#OpenRepository - Failed to read the header for: %v", err)
-		return nil, err
-	}
-
-	block, err := aes.NewCipher(result.AesKey)
-	if err != nil {
-		log.Printf("Repository#OpenRepository - Failed to create new block cipher for: %v", err)
-		return nil, err
-	}
-
-	stream := cipher.NewCTR(block, result.iv)
-	result.cryptoReader = &cipher.StreamReader{
-		S: stream,
-		R: repoFile,
-	}
-
-	result.tarReader = tar.NewReader(result.cryptoReader)
-	return result, nil
-}
-
-// AddFile adds data from a file
-func (r *WriteRepository) AddFile(filePath string) error {
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		log.Printf("Repository#AddFile - Unable to stat file %s: %v", filePath, err)
-		return err
-	}
-
-	header, err := tar.FileInfoHeader(fileInfo, filePath)
-	if err != nil {
-		log.Printf("Repository#AddFile - Unable create new info header for file %s: %v", filePath, err)
-		return err
-	}
-
-	err = r.tarWriter.WriteHeader(header)
-	if err != nil {
-		log.Printf("Repository#AddFile - Unable to write header into file %s: %v", filePath, err)
-		return err
-	}
-
-	infile, err := os.Open(filePath)
-	if err != nil {
-		log.Printf("Repository#AddFile - Unable to open input file %s: %v", filePath, err)
-		return err
-	}
-	defer infile.Close()
-
-	_, err = io.Copy(r.tarWriter, infile)
-	if err != nil {
-		log.Printf("Repository#AddFile - Failed to copy data from input file to tar writer %s: %v", filePath, err)
-		return err
-	}
-
-	return nil
-}
-
 // ExtractFile extracts a file from the repository
 func (r *ReadRepository) ExtractFile() error {
 	header, err := r.tarReader.Next()
@@ -274,11 +255,30 @@ func (r *ReadRepository) ExtractFile() error {
 	return nil
 }
 
-// Seal completes writing the data and closes the repository
-func (r *WriteRepository) Seal() error {
-	if err := r.tarWriter.Flush(); err != nil {
-		log.Printf("Repository#Seal - Failed to flush the tar writer.")
+// OpenRepository opens a repository for reading
+func OpenRepository(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, repoFile io.Reader) (*ReadRepository, error) {
+	result := &ReadRepository{}
+	result.privateKey = privateKey
+	result.publicKey = publicKey
+	var err error
+
+	if err = result.readHeader(repoFile); err != nil {
+		log.Printf("Repository#OpenRepository - Failed to read the header for: %v", err)
+		return nil, err
 	}
 
-	return nil
+	block, err := aes.NewCipher(result.AesKey)
+	if err != nil {
+		log.Printf("Repository#OpenRepository - Failed to create new block cipher for: %v", err)
+		return nil, err
+	}
+
+	stream := cipher.NewCTR(block, result.iv)
+	result.cryptoReader = &cipher.StreamReader{
+		S: stream,
+		R: repoFile,
+	}
+
+	result.tarReader = tar.NewReader(result.cryptoReader)
+	return result, nil
 }
