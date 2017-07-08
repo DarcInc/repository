@@ -75,19 +75,29 @@ func readPublicKeyFromFile(filename string) (*rsa.PublicKey, error) {
 	return rsaPublicKey, nil
 }
 
-func packRepository(archive, files, keyName string) {
+func packRepository(archive, files, pubKeyName, privKeyName string) {
 	parts := strings.Split(files, ",")
 	if len(parts) < 1 {
 		log.Printf("At least one file must be specified when create a repository")
 		return
 	}
 
-	publicKey, err := readPublicKeyFromFile(keyName)
+	publicKey, err := readPublicKeyFromFile(pubKeyName)
 	if err != nil {
 		log.Fatalf("Failed to read public key from file: %v", err)
 	}
 
-	repo, err := repository.CreateRepository(archive, publicKey)
+	privateKey, err := readPrivateKeyFromFile(privKeyName)
+	if err != nil {
+		log.Fatalf("Failed to read public key from file: %v", err)
+	}
+
+	file, err := os.OpenFile(archive, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		log.Fatalf("Failed to open archive %s: %v", archive, err)
+	}
+
+	repo, err := repository.CreateRepository(publicKey, privateKey, file)
 	if err != nil {
 		log.Fatalf("Failed to create repository %s: %v", archive, err)
 	}
@@ -107,13 +117,24 @@ func listContents(archive string) {
 
 }
 
-func unpackRepository(archive, keyname string) {
-	privateKey, err := readPrivateKeyFromFile(keyname)
+func unpackRepository(archive, privKeyName, pubKeyName string) {
+	privateKey, err := readPrivateKeyFromFile(privKeyName)
 	if err != nil {
-		log.Fatalf("Failed to read private key %s from file: %v", keyname, err)
+		log.Fatalf("Failed to read private key %s from file: %v", privKeyName, err)
 	}
 
-	repo, err := repository.OpenRepository(archive, privateKey)
+	publicKey, err := readPublicKeyFromFile(pubKeyName)
+	if err != nil {
+		log.Fatalf("Failed to read public key %s from file: %v", pubKeyName, err)
+	}
+
+	file, err := os.Open(archive)
+	if err != nil {
+		log.Fatalf("Failed to open archive %s: %v", archive, err)
+	}
+	defer file.Close()
+
+	repo, err := repository.OpenRepository(privateKey, publicKey, file)
 	if err != nil {
 		log.Fatalf("Failed to open repository %s: %v", archive, err)
 	}
@@ -127,10 +148,6 @@ func unpackRepository(archive, keyname string) {
 				break
 			}
 		}
-	}
-
-	if err = repo.Close(); err != nil {
-		log.Fatalf("Failed to close file: %v", err)
 	}
 }
 
@@ -149,7 +166,7 @@ func about() {
 	flag.Usage()
 }
 
-func validateArguments(action, archive, files, keyName string) bool {
+func validateArguments(action, archive, files, publicKey, privateKey, keyName string) bool {
 	result := true
 	switch action {
 	case "pack":
@@ -157,8 +174,12 @@ func validateArguments(action, archive, files, keyName string) bool {
 			log.Printf("Packing an archive requires a list of files")
 			result = false
 		}
-		if keyName == "" {
+		if publicKey == "" {
 			log.Printf("Packing an archive requires a key name")
+			result = false
+		}
+		if privateKey == "" {
+			log.Printf("Packing an archive requries a private key name")
 			result = false
 		}
 	case "list":
@@ -171,8 +192,12 @@ func validateArguments(action, archive, files, keyName string) bool {
 			log.Printf("When unpacking contents you must specify an archive")
 			result = false
 		}
-		if keyName == "" {
+		if privateKey == "" {
 			log.Printf("When unpacking contents you must specify a key name")
+			result = false
+		}
+		if publicKey == "" {
+			log.Printf("When unpacking contetns you must specify a public key")
 			result = false
 		}
 	case "create-keys":
@@ -187,16 +212,17 @@ func validateArguments(action, archive, files, keyName string) bool {
 
 func main() {
 	var (
-		action, archive, files, keyName string
+		action, archive, files, publicKey, privateKey, keyName string
 	)
 	flag.StringVar(&action, "action", "about", "What to do (pack, list, unpack, create-keys, about)")
 	flag.StringVar(&archive, "archive", "", "The name of the archive (required for pack, list, and unpack)")
 	flag.StringVar(&files, "files", "", "Comma separated list of files (required for pack)")
-	flag.StringVar(&keyName, "keyName", "", "Public key to use for encryption (required for pack)")
-
+	flag.StringVar(&publicKey, "publicKey", "", "Public key to use for encryption (required for pack)")
+	flag.StringVar(&privateKey, "privateKey", "", "Private key to use for signing or decryption (required for pack and unpack)")
+	flag.StringVar(&keyName, "keyName", "", "The name of the key (required for create key)")
 	flag.Parse()
 
-	if !validateArguments(action, archive, files, keyName) {
+	if !validateArguments(action, archive, files, privateKey, publicKey, keyName) {
 		log.Printf("Unable to continue")
 		about()
 		return
@@ -204,11 +230,11 @@ func main() {
 
 	switch action {
 	case "pack":
-		packRepository(archive, files, keyName)
+		packRepository(archive, files, publicKey, privateKey)
 	case "list":
 		listContents(archive)
 	case "unpack":
-		unpackRepository(archive, keyName)
+		unpackRepository(archive, publicKey, privateKey)
 	case "create-keys":
 		createKeys(keyName)
 	case "about":

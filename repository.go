@@ -2,10 +2,12 @@ package repository
 
 import (
 	"archive/tar"
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"io"
 	"log"
 	"os"
@@ -13,15 +15,25 @@ import (
 
 // Repository is an encrypted bunch of stuff
 type Repository struct {
-	AesKey       []byte
-	RepoFile     *os.File
-	publicKey    *rsa.PublicKey
-	privateKey   *rsa.PrivateKey
-	tarWriter    *tar.Writer
+	AesKey     []byte
+	publicKey  *rsa.PublicKey
+	privateKey *rsa.PrivateKey
+	iv         []byte
+	signature  []byte
+}
+
+// ReadRepository is a repository opened for reading
+type ReadRepository struct {
+	Repository
 	tarReader    *tar.Reader
-	iv           []byte
-	cryptoWriter *cipher.StreamWriter
 	cryptoReader *cipher.StreamReader
+}
+
+// WriteRepository is a repository opened for writing
+type WriteRepository struct {
+	Repository
+	tarWriter    *tar.Writer
+	cryptoWriter *cipher.StreamWriter
 }
 
 func (r *Repository) keylength() int {
@@ -36,10 +48,12 @@ func (r *Repository) keylength() int {
 	return 0
 }
 
-func (r *Repository) writeHeader() error {
+func (r *WriteRepository) writeHeader(repoFile io.Writer) error {
 	keyBytes := make([]byte, r.keylength()/2)
 	copy(keyBytes[0:32], r.AesKey)
 	copy(keyBytes[32:48], r.iv)
+
+	var err error
 
 	log.Printf("%d bytes", len(r.publicKey.N.Bytes()))
 	encryptedHeader, err := rsa.EncryptPKCS1v15(rand.Reader, r.publicKey, keyBytes)
@@ -48,9 +62,31 @@ func (r *Repository) writeHeader() error {
 		return err
 	}
 
-	_, err = r.RepoFile.Write(encryptedHeader)
+	_, err = repoFile.Write(encryptedHeader)
 	if err != nil {
 		log.Printf("Repository#writeHeader - Failed to write encrypted header: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func (r *WriteRepository) writeSignature(repoFile io.Writer) error {
+	key := make([]byte, len(r.AesKey)+len(r.iv))
+	copy(key[0:len(r.AesKey)], r.AesKey)
+	copy(key[len(r.AesKey):], r.iv)
+
+	var err error
+	hash := sha256.Sum256(key)
+	r.signature, err = rsa.SignPKCS1v15(rand.Reader, r.privateKey, crypto.SHA256, hash[:])
+	if err != nil {
+		log.Printf("Repository#writeHeader - Failed to sign header: %v", err)
+		return err
+	}
+
+	_, err = repoFile.Write(r.signature)
+	if err != nil {
+		log.Printf("Repository#writeSignature - failed to write signature: %v", err)
 		return err
 	}
 
@@ -61,13 +97,15 @@ func (r *Repository) writeHeader() error {
 //
 // AesKey contains the random AES encryption key
 // RepoFile points to the open file
-func CreateRepository(filename string, key *rsa.PublicKey) (*Repository, error) {
-	result := &Repository{publicKey: key}
+func CreateRepository(key *rsa.PublicKey, privateKey *rsa.PrivateKey, repoFile io.Writer) (*WriteRepository, error) {
+	result := &WriteRepository{}
+	result.publicKey = key
+	result.privateKey = privateKey
 
 	result.AesKey = make([]byte, 32)
 	_, err := rand.Read(result.AesKey)
 	if err != nil {
-		log.Printf("Repository#CreateRepository - Unable to read random data while creating %s: %v", filename, err)
+		log.Printf("Repository#CreateRepository - Unable to read random data while creating: %v", err)
 		return nil, err
 	}
 
@@ -84,22 +122,19 @@ func CreateRepository(filename string, key *rsa.PublicKey) (*Repository, error) 
 		return nil, err
 	}
 
-	result.RepoFile, err = os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0600)
-	if err != nil {
-		log.Printf("Repository#CreateRepository - Unable to create repository file %s: %v", filename, err)
+	if err = result.writeHeader(repoFile); err != nil {
+		log.Printf("Repository#CreateRepository - Unable to create header: %v", err)
 		return nil, err
 	}
 
-	if err = result.writeHeader(); err != nil {
-		log.Printf("Repository#CreateRepository - Unable to create header for %s: %v", filename, err)
-		result.RepoFile.Close()
-		return nil, err
+	if err = result.writeSignature(repoFile); err != nil {
+		log.Printf("Repository#CreateRepository - Unable to write signature: %v", err)
 	}
 
 	stream := cipher.NewCTR(block, result.iv)
 	result.cryptoWriter = &cipher.StreamWriter{
 		S: stream,
-		W: result.RepoFile,
+		W: repoFile,
 	}
 
 	result.tarWriter = tar.NewWriter(result.cryptoWriter)
@@ -107,9 +142,9 @@ func CreateRepository(filename string, key *rsa.PublicKey) (*Repository, error) 
 	return result, nil
 }
 
-func (r *Repository) readHeader() error {
+func (r *ReadRepository) readHeader(repoFile io.Reader) error {
 	encryptedHeader := make([]byte, r.keylength())
-	if _, err := r.RepoFile.Read(encryptedHeader); err != nil {
+	if _, err := repoFile.Read(encryptedHeader); err != nil {
 		log.Printf("Repository#readHeader - Unable to read header out of file: %v", err)
 		return err
 	}
@@ -126,35 +161,51 @@ func (r *Repository) readHeader() error {
 	return nil
 }
 
-// OpenRepository opens a repository for reading
-func OpenRepository(filename string, privateKey *rsa.PrivateKey) (*Repository, error) {
-	result := &Repository{}
-	result.privateKey = privateKey
-	var err error
-
-	result.RepoFile, err = os.OpenFile(filename, os.O_RDONLY, 0600)
-	if err != nil {
-		log.Printf("Repository#OpenRepository - Unable to open repository %s for reading: %v", filename, err)
-		return nil, err
+func (r *ReadRepository) verifySignature(repoFile io.Reader) error {
+	signature := make([]byte, r.keylength())
+	if _, err := repoFile.Read(signature); err != nil {
+		log.Printf("Repository#verifySignature - Unable to read signature block")
+		return err
 	}
 
-	if err = result.readHeader(); err != nil {
-		log.Printf("Repository#OpenRepository - Failed to read the header for %s: %v", filename, err)
-		result.RepoFile.Close()
+	header := make([]byte, r.keylength())
+	copy(header[0:32], r.AesKey)
+	copy(header[32:], r.iv)
+
+	sha := sha256.Sum256(header[0:48])
+	err := rsa.VerifyPKCS1v15(r.publicKey, crypto.SHA256, sha[:], signature)
+	if err != nil {
+		log.Printf("Respository#readHeader - Failed to verify signature: %v", err)
+		return err
+	}
+
+	r.signature = signature
+
+	return nil
+}
+
+// OpenRepository opens a repository for reading
+func OpenRepository(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, repoFile io.Reader) (*ReadRepository, error) {
+	result := &ReadRepository{}
+	result.privateKey = privateKey
+	result.publicKey = publicKey
+	var err error
+
+	if err = result.readHeader(repoFile); err != nil {
+		log.Printf("Repository#OpenRepository - Failed to read the header for: %v", err)
 		return nil, err
 	}
 
 	block, err := aes.NewCipher(result.AesKey)
 	if err != nil {
-		log.Printf("Repository#OpenRepository - Failed to create new block cipher for %s: %v", filename, err)
-		result.RepoFile.Close()
+		log.Printf("Repository#OpenRepository - Failed to create new block cipher for: %v", err)
 		return nil, err
 	}
 
 	stream := cipher.NewCTR(block, result.iv)
 	result.cryptoReader = &cipher.StreamReader{
 		S: stream,
-		R: result.RepoFile,
+		R: repoFile,
 	}
 
 	result.tarReader = tar.NewReader(result.cryptoReader)
@@ -162,7 +213,7 @@ func OpenRepository(filename string, privateKey *rsa.PrivateKey) (*Repository, e
 }
 
 // AddFile adds data from a file
-func (r *Repository) AddFile(filePath string) error {
+func (r *WriteRepository) AddFile(filePath string) error {
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		log.Printf("Repository#AddFile - Unable to stat file %s: %v", filePath, err)
@@ -198,7 +249,7 @@ func (r *Repository) AddFile(filePath string) error {
 }
 
 // ExtractFile extracts a file from the repository
-func (r *Repository) ExtractFile() error {
+func (r *ReadRepository) ExtractFile() error {
 	header, err := r.tarReader.Next()
 	if err == io.EOF {
 		return err
@@ -224,23 +275,9 @@ func (r *Repository) ExtractFile() error {
 }
 
 // Seal completes writing the data and closes the repository
-func (r *Repository) Seal() error {
+func (r *WriteRepository) Seal() error {
 	if err := r.tarWriter.Flush(); err != nil {
 		log.Printf("Repository#Seal - Failed to flush the tar writer.")
-	}
-
-	if err := r.RepoFile.Close(); err != nil {
-		log.Printf("Repository#Seal - Failed to close output file: %v", err)
-	}
-
-	return nil
-}
-
-// Close closes the repository
-func (r *Repository) Close() error {
-	if err := r.RepoFile.Close(); err != nil {
-		log.Printf("Repository#Close - Failed to close repo file: %v", err)
-		return err
 	}
 
 	return nil
