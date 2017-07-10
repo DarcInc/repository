@@ -4,21 +4,32 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
+	"fmt"
 	"testing"
 )
 
-func TestKeylength(t *testing.T) {
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
+var (
+	testAes = []byte("AESKEY256-32-Character1234567890")
+	testIv  = []byte("1234567890123456")
+	testKey = generateTestKey(1024)
+)
+
+func generateTestKey(bits int) *rsa.PrivateKey {
+	key, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
-		t.Fatalf("Failed to generate key for testing: %v", err)
+		panic(fmt.Sprintf("Failed to generate random key with %d bits", bits))
 	}
 
-	repo := &Repository{privateKey: key}
+	return key
+}
+
+func TestKeylength(t *testing.T) {
+	repo := &Repository{privateKey: testKey}
 	if repo.keylength() != 128 {
 		t.Errorf("Expected key length of 128 but got %d", repo.keylength())
 	}
 
-	repo = &Repository{publicKey: &key.PublicKey}
+	repo = &Repository{publicKey: &testKey.PublicKey}
 	if repo.keylength() != 128 {
 		t.Errorf("Expected key length of 128 but got %d", repo.keylength())
 	}
@@ -26,13 +37,9 @@ func TestKeylength(t *testing.T) {
 
 func TestWriteHeader(t *testing.T) {
 	repo := &WriteRepository{}
-	repo.AesKey = []byte("AESKEY256-32-Character1234567890")
-	repo.iv = []byte("1234567890123456")
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
-	if err != nil {
-		t.Fatalf("Failed to generate key for testing: %v", err)
-	}
-	repo.publicKey = &key.PublicKey
+	repo.AesKey = testAes
+	repo.iv = testIv
+	repo.publicKey = &testKey.PublicKey
 
 	buffer := new(bytes.Buffer)
 	repo.writeHeader(buffer)
@@ -40,4 +47,20 @@ func TestWriteHeader(t *testing.T) {
 	if len(buffer.Bytes()) != repo.keylength() {
 		t.Errorf("Expected %d bytes but got %d", repo.keylength(), len(buffer.Bytes()))
 	}
+}
+
+func TestWriteSignature(t *testing.T) {
+	repo := &WriteRepository{}
+	repo.AesKey = testAes
+	repo.iv = testIv
+	repo.privateKey = testKey
+	repo.publicKey = &testKey.PublicKey
+
+	buffer := new(bytes.Buffer)
+	repo.writeSignature(buffer)
+
+	if len(buffer.Bytes()) != repo.keylength() {
+		t.Errorf("Expected %d bytes but got %d", repo.keylength(), len(buffer.Bytes()))
+	}
+
 }

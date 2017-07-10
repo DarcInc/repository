@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"flag"
@@ -13,34 +12,8 @@ import (
 	"strings"
 
 	"github.com/darcinc/repository"
+	"github.com/darcinc/repository/commands"
 )
-
-func writeKeyPairToFile(key *rsa.PrivateKey, filename string) error {
-	privateKeyName := fmt.Sprintf("%s.key", filename)
-	publicKeyName := fmt.Sprintf("%s-pub.key", filename)
-
-	privateKeyData := x509.MarshalPKCS1PrivateKey(key)
-	publicKeyData, err := x509.MarshalPKIXPublicKey(key.Public())
-	if err != nil {
-		log.Printf("Failed to marshal public key: %v", err)
-		return err
-	}
-
-	err = ioutil.WriteFile(privateKeyName, privateKeyData, 0644)
-	if err != nil {
-		log.Printf("Failed to write private key: %s: %v", privateKeyName, err)
-		return err
-	}
-
-	ioutil.WriteFile(publicKeyName, publicKeyData, 0644)
-	if err != nil {
-		log.Printf("Failed to write public key: %s: %v", publicKeyName, err)
-		os.Remove(privateKeyName)
-		return err
-	}
-
-	return nil
-}
 
 func readPrivateKeyFromFile(filename string) (*rsa.PrivateKey, error) {
 	data, err := ioutil.ReadFile(fmt.Sprintf("%s.key", filename))
@@ -151,17 +124,6 @@ func unpackRepository(archive, privKeyName, pubKeyName string) {
 	}
 }
 
-func createKeys(keyName string) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		log.Fatalf("Failed to generate keys %s: %v", keyName, err)
-	}
-
-	if err = writeKeyPairToFile(privateKey, keyName); err != nil {
-		log.Fatalf("Failed to write keys to file: %v", err)
-	}
-}
-
 func about() {
 	flag.Usage()
 }
@@ -213,6 +175,7 @@ func validateArguments(action, archive, files, publicKey, privateKey, keyName st
 func main() {
 	var (
 		action, archive, files, publicKey, privateKey, keyName string
+		cipherStrength                                         int
 	)
 	flag.StringVar(&action, "action", "about", "What to do (pack, list, unpack, create-keys, about)")
 	flag.StringVar(&archive, "archive", "", "The name of the archive (required for pack, list, and unpack)")
@@ -220,6 +183,7 @@ func main() {
 	flag.StringVar(&publicKey, "publicKey", "", "Public key to use for encryption (required for pack)")
 	flag.StringVar(&privateKey, "privateKey", "", "Private key to use for signing or decryption (required for pack and unpack)")
 	flag.StringVar(&keyName, "keyName", "", "The name of the key (required for create key)")
+	flag.IntVar(&cipherStrength, "bits", 4096, "The number of bits for the RSA key")
 	flag.Parse()
 
 	if !validateArguments(action, archive, files, privateKey, publicKey, keyName) {
@@ -236,7 +200,7 @@ func main() {
 	case "unpack":
 		unpackRepository(archive, publicKey, privateKey)
 	case "create-keys":
-		createKeys(keyName)
+		commands.CreateKeys(keyName, cipherStrength)
 	case "about":
 		about()
 	}
