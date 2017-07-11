@@ -267,6 +267,11 @@ func OpenRepository(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, repoFi
 		return nil, err
 	}
 
+	if err = result.verifySignature(repoFile); err != nil {
+		log.Printf("Repository#OpenRepository - Failed to verify the signature: %v", err)
+		return nil, err
+	}
+
 	block, err := aes.NewCipher(result.AesKey)
 	if err != nil {
 		log.Printf("Repository#OpenRepository - Failed to create new block cipher for: %v", err)

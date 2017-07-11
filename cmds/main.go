@@ -7,27 +7,8 @@ import (
 	"github.com/darcinc/repository/commands"
 )
 
-func listContents(archive string) {
-
-}
-
 func about() {
 	flag.Usage()
-}
-
-func validateArguments(action, archive, files, publicKey, privateKey, keyName string) bool {
-	result := true
-	switch {
-	case action == "create-keys" || action == "pack" || action == "unpack":
-		result = commands.ValidateArguments(action, archive, files, publicKey, privateKey, keyName)
-	case action == "list":
-		if archive == "" {
-			log.Printf("When listing contents you must specify an archive")
-			result = false
-		}
-	}
-
-	return result
 }
 
 func main() {
@@ -44,7 +25,7 @@ func main() {
 	flag.IntVar(&cipherStrength, "bits", 4096, "The number of bits for the RSA key")
 	flag.Parse()
 
-	if !validateArguments(action, archive, files, privateKey, publicKey, keyName) {
+	if !commands.ValidateArguments(action, archive, files, privateKey, publicKey, keyName) {
 		log.Printf("Unable to continue")
 		about()
 		return
@@ -54,7 +35,7 @@ func main() {
 	case "pack":
 		commands.PackRepository(archive, files, publicKey, privateKey)
 	case "list":
-		listContents(archive)
+		commands.ListContents(archive)
 	case "unpack":
 		commands.UnpackRepository(archive, publicKey, privateKey)
 	case "create-keys":

@@ -44,6 +44,11 @@ func ValidateArguments(action, archive, files, publicKey, privateKey, keyName st
 			log.Printf("When creating keys you must specify a keyname")
 			result = false
 		}
+	case "list":
+		if archive == "" {
+			log.Printf("When listing contents you must specify an archive")
+			result = false
+		}
 	}
 	return result
 }
