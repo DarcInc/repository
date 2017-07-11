@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
+	"log"
 	"testing"
 )
 
@@ -63,4 +64,18 @@ func TestWriteSignature(t *testing.T) {
 		t.Errorf("Expected %d bytes but got %d", repo.keylength(), len(buffer.Bytes()))
 	}
 
+}
+
+func TestCreateRepository(t *testing.T) {
+	buffer := new(bytes.Buffer)
+	_, err := CreateRepository(&testKey.PublicKey, testKey, buffer)
+	if err != nil {
+		log.Fatalf("Unable to write out repository: %v", err)
+	}
+
+	reader := bytes.NewReader(buffer.Bytes())
+	_, err = OpenRepository(testKey, &testKey.PublicKey, reader)
+	if err != nil {
+		log.Fatalf("Failed to open repository: %v", err)
+	}
 }
