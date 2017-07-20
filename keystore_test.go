@@ -1,28 +1,35 @@
 package repository
 
 import (
-	"fmt"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"os"
 
 	"crypto/rand"
 	"crypto/rsa"
-
 	"crypto/x509"
 
-	"github.com/spf13/afero"
+	"github.com/darcinc/afero"
 )
 
 func createTestFs() (afero.Fs, error) {
 	appfs := afero.NewMemMapFs()
-
 	userHome := os.Getenv("HOME")
-	dir := fmt.Sprintf("%s/.repkey", userHome)
+
+	var err error
+	if runtime.GOOS == "windows" {
+		userHome, err = filepath.Abs(os.Getenv("HOMEPATH"))
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	filename := "keystore.sqlite"
 
-	appfs.MkdirAll(dir, 0700)
-	file, err := appfs.Create(fmt.Sprintf("%s/%s", dir, filename))
+	appfs.MkdirAll(filepath.Join(userHome, ".repkey"), 0700)
+	file, err := appfs.Create(filepath.Join(userHome, ".repkey", filename))
 	if err != nil {
 		return nil, err
 	}
@@ -36,8 +43,16 @@ func TestAbsolutePathKeystoreExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TestAbsolutePathKeystoreExists - Failed to create test filesystem: %v", err)
 	}
+	homedir := os.Getenv("HOME")
+	if runtime.GOOS == "windows" {
+		homedir = os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+	}
 
-	ok, err := keystoreExists(appfs, fmt.Sprintf("%s/.repkey/keystore.sqlite", os.Getenv("HOME")))
+	fullPath, err := filepath.Abs(filepath.Join(homedir, ".repkey", "keystore.sqlite"))
+	if err != nil {
+		t.Fatalf("TestAbsolutePathKeystoreExists - Error creating absolute path: %v", err)
+	}
+	ok, err := keystoreExists(appfs, fullPath)
 	if err != nil {
 		t.Fatalf("TestAbsolutePathKeystoreExists - Failed to check existence of keystore: %v", err)
 	}
@@ -59,7 +74,7 @@ func TestNamedKeystoreExists(t *testing.T) {
 	}
 
 	if !ok {
-		t.Error("TestNamedKeystoreExists - Expected keystore to exist")
+		t.Errorf("TestNamedKeystoreExists - Expected keystore to exist")
 	}
 }
 

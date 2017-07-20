@@ -2,31 +2,35 @@ package repository
 
 import (
 	"path"
+	"path/filepath"
+	"runtime"
 
 	"os"
 
 	"crypto/rsa"
-
 	"crypto/x509"
-
 	"encoding/json"
 
-	"github.com/spf13/afero"
+	"github.com/darcinc/afero"
 )
 
 func defaultDirectory() string {
-	return path.Join(os.Getenv("HOME"), ".repkey")
+	homedir := os.Getenv("HOME")
+	if runtime.GOOS == "windows" {
+		homedir = os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+	}
+	return filepath.Join(homedir, ".repkey")
 }
 
 func namedKeystoreFile(location string) string {
-	return path.Join(defaultDirectory(), location+".sqlite")
+	return filepath.Join(defaultDirectory(), location+".sqlite")
 }
 
 func keystoreExists(fs afero.Fs, location string) (bool, error) {
 	var dir string
 	var fullpath string
 
-	if path.IsAbs(location) {
+	if filepath.IsAbs(location) {
 		dir = path.Dir(location)
 		fullpath = location
 	} else {
