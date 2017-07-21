@@ -14,7 +14,7 @@ import (
 	"github.com/darcinc/afero"
 )
 
-func defaultDirectory() string {
+func KeystoreDefaultDirectory() string {
 	homedir := os.Getenv("HOME")
 	if runtime.GOOS == "windows" {
 		homedir = os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
@@ -22,8 +22,11 @@ func defaultDirectory() string {
 	return filepath.Join(homedir, ".repkey")
 }
 
-func namedKeystoreFile(location string) string {
-	return filepath.Join(defaultDirectory(), location+".sqlite")
+func NamedKeystoreFile(location string) string {
+	if filepath.IsAbs(location) {
+		return location
+	}
+	return filepath.Join(KeystoreDefaultDirectory(), location+".sqlite")
 }
 
 func keystoreExists(fs afero.Fs, location string) (bool, error) {
@@ -34,8 +37,8 @@ func keystoreExists(fs afero.Fs, location string) (bool, error) {
 		dir = path.Dir(location)
 		fullpath = location
 	} else {
-		dir = defaultDirectory()
-		fullpath = namedKeystoreFile(location)
+		dir = KeystoreDefaultDirectory()
+		fullpath = NamedKeystoreFile(location)
 	}
 
 	ok, err := afero.DirExists(fs, dir)
@@ -55,7 +58,7 @@ func keystoreExists(fs afero.Fs, location string) (bool, error) {
 	return ok, nil
 }
 
-// Keystore is the collection fo keys
+// Keystore is the collection of keys
 type Keystore struct {
 	PrivateKeys map[string][]byte
 	PublicKeys  map[string][]byte
@@ -67,11 +70,16 @@ func CreateKeystore(fs afero.Fs, name string) (*Keystore, error) {
 	result.PrivateKeys = make(map[string][]byte)
 	result.PublicKeys = make(map[string][]byte)
 
-	file, err := fs.OpenFile(namedKeystoreFile(name), os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	file, err := fs.OpenFile(NamedKeystoreFile(name), os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
+
+	err = result.Save(file)
+	if err != nil {
+		return nil, err
+	}
 
 	return result, nil
 }
@@ -157,5 +165,5 @@ func KeystorePath(name string) string {
 		return name
 	}
 
-	return namedKeystoreFile(name)
+	return NamedKeystoreFile(name)
 }
