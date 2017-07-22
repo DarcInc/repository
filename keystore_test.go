@@ -190,6 +190,35 @@ func TestAddPublicKey(t *testing.T) {
 	}
 }
 
+func TestRemoveKey(t *testing.T) {
+	keystore := &Keystore{}
+	keystore.PrivateKeys = make(map[string][]byte)
+	keystore.PublicKeys = make(map[string][]byte)
+
+	key1, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatalf("TestRemoveKey - Error generating private key: %v", err)
+	}
+	key2, err := rsa.GenerateKey(rand.Reader, 1204)
+	if err != nil {
+		t.Fatalf("TestRemoveKey - Error generating public key: %v", err)
+	}
+	keystore.AddPrivateKey("test1", key1)
+	keystore.AddPublicKey("test2", &key2.PublicKey)
+
+	keystore.RemoveKey("test1")
+	_, ok := keystore.FindPrivateKey("test1")
+	if ok {
+		t.Error("TestRemoveKey - Failed to remove private key")
+	}
+
+	keystore.RemoveKey("test2")
+	_, ok = keystore.FindPublicKey("test2")
+	if ok {
+		t.Error("TestRemoveKey - Failed to remove public key")
+	}
+}
+
 func TestSaveKeystore(t *testing.T) {
 	appfs, err := createTestFs()
 	if err != nil {

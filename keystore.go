@@ -138,6 +138,18 @@ func (k *Keystore) AddPublicKey(name string, key *rsa.PublicKey) {
 	k.PublicKeys[name] = bytes
 }
 
+func (k *Keystore) RemoveKey(name string) {
+	_, ok := k.PrivateKeys[name]
+	if ok {
+		delete(k.PrivateKeys, name)
+	}
+
+	_, ok = k.PublicKeys[name]
+	if ok {
+		delete(k.PublicKeys, name)
+	}
+}
+
 // Save saves a keystore to a file
 func (k *Keystore) Save(file afero.File) error {
 	encoder := json.NewEncoder(file)
