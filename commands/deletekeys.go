@@ -7,6 +7,7 @@ import (
 	"github.com/darcinc/repository"
 )
 
+// DeleteKeys removes a key from the keystore
 func DeleteKeys(fs afero.Fs, keyfile, name string) {
 	filename := repository.NamedKeystoreFile(keyfile)
 	file, err := fs.Open(filename)
