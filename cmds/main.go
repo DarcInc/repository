@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 
+	"github.com/darcinc/afero"
 	"github.com/darcinc/repository/commands"
 )
 
@@ -17,7 +18,7 @@ func main() {
 		keyfile                                                string
 		cipherStrength                                         int
 	)
-	flag.StringVar(&action, "action", "about", "What to do (pack, list, unpack, create-keys, about)")
+	flag.StringVar(&action, "action", "about", "What to do (pack, list, unpack, create-keys, list-keys, about)")
 	flag.StringVar(&archive, "archive", "", "The name of the archive (required for pack, list, and unpack)")
 	flag.StringVar(&files, "files", "", "Comma separated list of files (required for pack)")
 	flag.StringVar(&publicKey, "publicKey", "", "Public key to use for encryption (required for pack)")
@@ -34,6 +35,8 @@ func main() {
 		return
 	}
 
+	fs := afero.NewOsFs()
+
 	switch action {
 	case "pack":
 		commands.PackRepository(archive, files, publicKey, privateKey)
@@ -42,7 +45,9 @@ func main() {
 	case "unpack":
 		commands.UnpackRepository(archive, publicKey, privateKey)
 	case "create-keys":
-		commands.CreateKeys(keyName, keyfile, cipherStrength)
+		commands.CreateKeys(fs, keyName, keyfile, cipherStrength)
+	case "list-keys":
+		commands.ListKeys(fs, keyfile)
 	case "about":
 		about()
 	}
