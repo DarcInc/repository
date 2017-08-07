@@ -7,13 +7,6 @@ import (
 	"testing"
 )
 
-var (
-	shortKey = generateTestKey(1024)
-	medKey   = generateTestKey(2048)
-	longKey  = generateTestKey(4096)
-	keys     = []*rsa.PrivateKey{shortKey, medKey, longKey}
-)
-
 func TestWriteHeader(t *testing.T) {
 
 	for _, k := range keys {
