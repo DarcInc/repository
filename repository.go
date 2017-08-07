@@ -2,12 +2,9 @@ package repository
 
 import (
 	"archive/tar"
-	"crypto"
-	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -15,11 +12,9 @@ import (
 
 // Repository is an encrypted bunch of stuff
 type Repository struct {
-	AesKey     []byte
+	Label      Label
 	publicKey  *rsa.PublicKey
 	privateKey *rsa.PrivateKey
-	iv         []byte
-	signature  []byte
 }
 
 // ReadRepository is a repository opened for reading
@@ -33,7 +28,29 @@ type ReadRepository struct {
 type WriteRepository struct {
 	Repository
 	tarWriter    *tar.Writer
-	cryptoWriter *cipher.StreamWriter
+	cryptoWriter io.Writer
+}
+
+// Error describes an error when reading, writing or creating repositories.
+// It retains the original error and an error message to assist in debugging.
+type Error struct {
+	OriginalError error
+	Message       string
+}
+
+// Error implements the error interface, returning the string representation
+// of the error.
+func (re *Error) Error() string {
+	return fmt.Sprintf("%s: %v", re.Message, re.OriginalError)
+}
+
+// NewError is a convenience method for creating new repository
+// errors from a message and original error.
+func NewError(err error, message string) *Error {
+	return &Error{
+		OriginalError: err,
+		Message:       message,
+	}
 }
 
 func (r *Repository) keylength() int {
@@ -46,51 +63,6 @@ func (r *Repository) keylength() int {
 	}
 
 	return 0
-}
-
-func (r *WriteRepository) writeHeader(repoFile io.Writer) error {
-	keyBytes := make([]byte, r.keylength()/2)
-	copy(keyBytes[0:32], r.AesKey)
-	copy(keyBytes[32:48], r.iv)
-
-	var err error
-
-	log.Printf("%d bytes", len(r.publicKey.N.Bytes()))
-	encryptedHeader, err := rsa.EncryptPKCS1v15(rand.Reader, r.publicKey, keyBytes)
-	if err != nil {
-		log.Printf("Repository#writeHeader - Failed to encrypt header: %v", err)
-		return err
-	}
-
-	_, err = repoFile.Write(encryptedHeader)
-	if err != nil {
-		log.Printf("Repository#writeHeader - Failed to write encrypted header: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func (r *WriteRepository) writeSignature(repoFile io.Writer) error {
-	key := make([]byte, len(r.AesKey)+len(r.iv))
-	copy(key[0:len(r.AesKey)], r.AesKey)
-	copy(key[len(r.AesKey):], r.iv)
-
-	var err error
-	hash := sha256.Sum256(key)
-	r.signature, err = rsa.SignPKCS1v15(rand.Reader, r.privateKey, crypto.SHA256, hash[:])
-	if err != nil {
-		log.Printf("Repository#writeHeader - Failed to sign header: %v", err)
-		return err
-	}
-
-	_, err = repoFile.Write(r.signature)
-	if err != nil {
-		log.Printf("Repository#writeSignature - failed to write signature: %v", err)
-		return err
-	}
-
-	return nil
 }
 
 // Seal completes writing the data and closes the repository
@@ -138,95 +110,36 @@ func (r *WriteRepository) AddFile(filePath string) error {
 	return nil
 }
 
-// CreateRepository creates a new repository with the given filename
+// CreateRepository creates a new repository in the given writer.  Returns
+// a writeable repository or nil and an error if there's an error.  The repository
+// is conceptually a tape with a label and then the tape contents.  The label
+// contains a random AES256 key and a random initialization vector for the AES
+// algorithm.  A SHA256 signature is generated for the two values.  The two values are
+// encrypted.  The complete label is considered the encrypted key, initialization
+// vector and the unencrypted signature.
 //
-// AesKey contains the random AES encryption key
-// RepoFile points to the open file
+// The public key is the key used for encryption.
+// The private key is used for signatures.
+// The writer is where they repoistory will be created.
 func CreateRepository(key *rsa.PublicKey, privateKey *rsa.PrivateKey, repoFile io.Writer) (*WriteRepository, error) {
 	result := &WriteRepository{}
 	result.publicKey = key
 	result.privateKey = privateKey
+	var err error
 
-	result.AesKey = make([]byte, 32)
-	_, err := rand.Read(result.AesKey)
+	result.Label, err = RandomLabel()
 	if err != nil {
-		log.Printf("Repository#CreateRepository - Unable to read random data while creating: %v", err)
-		return nil, err
+		return nil, NewError(err, "Unable to generate new, random label")
 	}
 
-	result.iv = make([]byte, 16)
-	_, err = rand.Read(result.iv)
+	result.cryptoWriter, err = result.Label.OpenWriter(repoFile)
 	if err != nil {
-		log.Printf("Repository#CreateRepository - Unable to generate new initializtion vector: %v", err)
-		return nil, err
-	}
-
-	block, err := aes.NewCipher(result.AesKey)
-	if err != nil {
-		log.Printf("Repository#CreateRepository - Unable to create a new cipher block: %v", err)
-		return nil, err
-	}
-
-	if err = result.writeHeader(repoFile); err != nil {
-		log.Printf("Repository#CreateRepository - Unable to create header: %v", err)
-		return nil, err
-	}
-
-	if err = result.writeSignature(repoFile); err != nil {
-		log.Printf("Repository#CreateRepository - Unable to write signature: %v", err)
-	}
-
-	stream := cipher.NewCTR(block, result.iv)
-	result.cryptoWriter = &cipher.StreamWriter{
-		S: stream,
-		W: repoFile,
+		return nil, NewError(err, "Unable to open respository writer")
 	}
 
 	result.tarWriter = tar.NewWriter(result.cryptoWriter)
 
 	return result, nil
-}
-
-func (r *ReadRepository) readHeader(repoFile io.Reader) error {
-	encryptedHeader := make([]byte, r.keylength())
-	if _, err := repoFile.Read(encryptedHeader); err != nil {
-		log.Printf("Repository#readHeader - Unable to read header out of file: %v", err)
-		return err
-	}
-
-	header, err := rsa.DecryptPKCS1v15(rand.Reader, r.privateKey, encryptedHeader)
-	if err != nil {
-		log.Printf("Repository#readHeader - Failed to decrypt header: %v", err)
-		return err
-	}
-
-	r.AesKey = header[0:32]
-	r.iv = header[32:48]
-
-	return nil
-}
-
-func (r *ReadRepository) verifySignature(repoFile io.Reader) error {
-	signature := make([]byte, r.keylength())
-	if _, err := repoFile.Read(signature); err != nil {
-		log.Printf("Repository#verifySignature - Unable to read signature block")
-		return err
-	}
-
-	header := make([]byte, r.keylength())
-	copy(header[0:32], r.AesKey)
-	copy(header[32:], r.iv)
-
-	sha := sha256.Sum256(header[0:48])
-	err := rsa.VerifyPKCS1v15(r.publicKey, crypto.SHA256, sha[:], signature)
-	if err != nil {
-		log.Printf("Respository#readHeader - Failed to verify signature: %v", err)
-		return err
-	}
-
-	r.signature = signature
-
-	return nil
 }
 
 // ExtractFile extracts a file from the repository
@@ -262,28 +175,16 @@ func OpenRepository(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, repoFi
 	result.publicKey = publicKey
 	var err error
 
-	if err = result.readHeader(repoFile); err != nil {
-		log.Printf("Repository#OpenRepository - Failed to read the header for: %v", err)
-		return nil, err
-	}
-
-	if err = result.verifySignature(repoFile); err != nil {
-		log.Printf("Repository#OpenRepository - Failed to verify the signature: %v", err)
-		return nil, err
-	}
-
-	block, err := aes.NewCipher(result.AesKey)
+	result.Label, err = ReadLabel(repoFile, privateKey, publicKey)
 	if err != nil {
-		log.Printf("Repository#OpenRepository - Failed to create new block cipher for: %v", err)
-		return nil, err
+		return nil, NewError(err, "Unable to read respository label")
 	}
 
-	stream := cipher.NewCTR(block, result.iv)
-	result.cryptoReader = &cipher.StreamReader{
-		S: stream,
-		R: repoFile,
+	cryptoReader, err := result.Label.OpenReader(repoFile)
+	if err != nil {
+		return nil, NewError(err, "Unable to open a new crypto reader")
 	}
 
-	result.tarReader = tar.NewReader(result.cryptoReader)
+	result.tarReader = tar.NewReader(cryptoReader)
 	return result, nil
 }

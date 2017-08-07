@@ -14,6 +14,9 @@ import (
 	"github.com/darcinc/afero"
 )
 
+// KeystoreDefaultDirectory returns the default directory for named keystores.
+// By default the default directory is in the user's home directory and the
+// .repkey "hidden director".  E.g. (/home/joeuser/.repkey on Unix.)
 func KeystoreDefaultDirectory() string {
 	homedir := os.Getenv("HOME")
 	if runtime.GOOS == "windows" {
@@ -22,6 +25,8 @@ func KeystoreDefaultDirectory() string {
 	return filepath.Join(homedir, ".repkey")
 }
 
+// NamedKeystoreFile returns a named keystore file from the user's default
+// keystore directory.
 func NamedKeystoreFile(location string) string {
 	if filepath.IsAbs(location) {
 		return location
@@ -58,13 +63,15 @@ func keystoreExists(fs afero.Fs, location string) (bool, error) {
 	return ok, nil
 }
 
-// Keystore is the collection of keys
+// Keystore is the collection of private and public keys.
 type Keystore struct {
 	PrivateKeys map[string][]byte
 	PublicKeys  map[string][]byte
 }
 
-// CreateKeystore creates a new keystore or fails if one exist
+// CreateKeystore creates a new key store in the given file system.  If a keystore
+// already exists, that is an error.  Returns the keystore or nil if there was
+// an error.
 func CreateKeystore(fs afero.Fs, name string) (*Keystore, error) {
 	result := &Keystore{}
 	result.PrivateKeys = make(map[string][]byte)
@@ -84,13 +91,15 @@ func CreateKeystore(fs afero.Fs, name string) (*Keystore, error) {
 	return result, nil
 }
 
-// AddPrivateKey adds a private key to the keystore
+// AddPrivateKey adds a private key to the key store with the given name.
 func (k *Keystore) AddPrivateKey(name string, key *rsa.PrivateKey) {
 	bytes := x509.MarshalPKCS1PrivateKey(key)
 	k.PrivateKeys[name] = bytes
 }
 
-// FindPrivateKey finds a private key from the keystore
+// FindPrivateKey finds a private key from the keystore with the given
+// name.  If no key is found, it returns nil and false for the second
+// return value.
 func (k *Keystore) FindPrivateKey(name string) (*rsa.PrivateKey, bool) {
 	bytes, ok := k.PrivateKeys[name]
 	if !ok {
@@ -105,7 +114,8 @@ func (k *Keystore) FindPrivateKey(name string) (*rsa.PrivateKey, bool) {
 	return result, ok
 }
 
-// FindPublicKey is returned the public key for a given name
+// FindPublicKey return the private or public key for a given nanem.  If
+// no key is found nil is returned and false for the second return value.
 func (k *Keystore) FindPublicKey(name string) (*rsa.PublicKey, bool) {
 	bytes, ok := k.PrivateKeys[name]
 	if !ok {
@@ -128,7 +138,7 @@ func (k *Keystore) FindPublicKey(name string) (*rsa.PublicKey, bool) {
 	return &result.PublicKey, ok
 }
 
-// AddPublicKey to keystore
+// AddPublicKey to keystore with the given name.
 func (k *Keystore) AddPublicKey(name string, key *rsa.PublicKey) {
 	bytes, err := x509.MarshalPKIXPublicKey(key)
 	if err != nil {
@@ -138,6 +148,8 @@ func (k *Keystore) AddPublicKey(name string, key *rsa.PublicKey) {
 	k.PublicKeys[name] = bytes
 }
 
+// RemoveKey removes a private key ad or public key with
+// that name.
 func (k *Keystore) RemoveKey(name string) {
 	_, ok := k.PrivateKeys[name]
 	if ok {
@@ -150,13 +162,15 @@ func (k *Keystore) RemoveKey(name string) {
 	}
 }
 
-// Save saves a keystore to a file
+// Save saves a keystore to a file.  Returns an erro if the
+// keystore cannot be saved to the file.
 func (k *Keystore) Save(file afero.File) error {
 	encoder := json.NewEncoder(file)
 	return encoder.Encode(k)
 }
 
-// OpenKeystore opens a keystore pointed to by a file
+// OpenKeystore opnes a keystore from a file.  Returns a keystore
+// or nil if there is an error.
 func OpenKeystore(file afero.File) (*Keystore, error) {
 	decoder := json.NewDecoder(file)
 	keystore := &Keystore{
@@ -171,7 +185,9 @@ func OpenKeystore(file afero.File) (*Keystore, error) {
 	return keystore, nil
 }
 
-// KeystorePath returns the path to a keystore
+// KeystorePath returns the path to a keystore.  If the path is an
+// absolute path, that is returned.  If the path is not an absolute
+// path, then it is assumed to be a named keystore.
 func KeystorePath(name string) string {
 	if path.IsAbs(name) {
 		return name

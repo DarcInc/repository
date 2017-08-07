@@ -36,36 +36,6 @@ func TestKeylength(t *testing.T) {
 	}
 }
 
-func TestWriteHeader(t *testing.T) {
-	repo := &WriteRepository{}
-	repo.AesKey = testAes
-	repo.iv = testIv
-	repo.publicKey = &testKey.PublicKey
-
-	buffer := new(bytes.Buffer)
-	repo.writeHeader(buffer)
-
-	if len(buffer.Bytes()) != repo.keylength() {
-		t.Errorf("Expected %d bytes but got %d", repo.keylength(), len(buffer.Bytes()))
-	}
-}
-
-func TestWriteSignature(t *testing.T) {
-	repo := &WriteRepository{}
-	repo.AesKey = testAes
-	repo.iv = testIv
-	repo.privateKey = testKey
-	repo.publicKey = &testKey.PublicKey
-
-	buffer := new(bytes.Buffer)
-	repo.writeSignature(buffer)
-
-	if len(buffer.Bytes()) != repo.keylength() {
-		t.Errorf("Expected %d bytes but got %d", repo.keylength(), len(buffer.Bytes()))
-	}
-
-}
-
 func TestCreateRepository(t *testing.T) {
 	buffer := new(bytes.Buffer)
 	_, err := CreateRepository(&testKey.PublicKey, testKey, buffer)
