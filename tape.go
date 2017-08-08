@@ -4,78 +4,80 @@ import (
 	"archive/tar"
 	"crypto/cipher"
 	"crypto/rsa"
+	"fmt"
 	"io"
-	"log"
 	"os"
+
+	"github.com/darcinc/afero"
 )
 
-// Key is the key necessary to unlock a tape.
+// Key is the key necessary to unlock a tape.  A key contains the
+// label (which contains the random AES key IV necessary to
+// decipher the tape).  When creating tapes, it contains the
+// public key used to encrypt the label and the private key
+// used to sign the label.  When deciphering tapes, it contains
+// the private key to unencrypt the label and the public
+// to to veify the label signature.
 type Key struct {
 	Label      Label
 	PublicKey  *rsa.PublicKey
 	PrivateKey *rsa.PrivateKey
 }
 
-// TapeReader is the mechanism for reading from an encrypted tape.
+// TapeReader is used to read from and unpack an encrypted
+// tape.  It contains the key necessary to decipher the tape
+// and the archive reader necessary to read data from the
+// tape.
 type TapeReader struct {
 	Key          Key
 	tarReader    *tar.Reader
 	cryptoReader *cipher.StreamReader
 }
 
-// TapeWriter is the mechanism for writing an encrypted tape
+// TapeWriter is used to write data into a tape.  It contains
+// the Key used to set up encryption and the archive writer
+// to write data into the tape.
 type TapeWriter struct {
 	Key          Key
 	tarWriter    *tar.Writer
 	cryptoWriter io.Writer
 }
 
-// Seal completes writing the data and closes the repository
-func (r *TapeWriter) Seal() error {
-	if err := r.tarWriter.Flush(); err != nil {
-		log.Printf("Repository#Seal - Failed to flush the tar writer.")
-	}
-
-	return nil
-}
-
-// AddFile adds data from a file to the tape.
-func (r *TapeWriter) AddFile(filePath string) error {
-	fileInfo, err := os.Stat(filePath)
+// AddFile adds data to the tape by reading the contents of a file
+// a given path.  The writing occurs in two parts.  First in the
+// metadata about the file and then are the actual file contents.
+func (r *TapeWriter) AddFile(fs afero.Fs, filePath string) error {
+	fileInfo, err := fs.Stat(filePath)
 	if err != nil {
-		log.Printf("Repository#AddFile - Unable to stat file %s: %v", filePath, err)
-		return err
+		return NewError(err, fmt.Sprintf("Unable to stat file %s", filePath))
 	}
 
 	header, err := tar.FileInfoHeader(fileInfo, filePath)
 	if err != nil {
-		log.Printf("Repository#AddFile - Unable create new info header for file %s: %v", filePath, err)
-		return err
+		return NewError(err, fmt.Sprintf("Unable to create info header for %s", filePath))
 	}
+	header.Name = filePath
 
 	err = r.tarWriter.WriteHeader(header)
 	if err != nil {
-		log.Printf("Repository#AddFile - Unable to write header into file %s: %v", filePath, err)
-		return err
+		return NewError(err, fmt.Sprintf("Unable to write header into file %s", filePath))
 	}
 
-	infile, err := os.Open(filePath)
+	infile, err := fs.Open(filePath)
 	if err != nil {
-		log.Printf("Repository#AddFile - Unable to open input file %s: %v", filePath, err)
-		return err
+		return NewError(err, fmt.Sprintf("Unable to open input file %s", filePath))
 	}
 	defer infile.Close()
 
 	_, err = io.Copy(r.tarWriter, infile)
 	if err != nil {
-		log.Printf("Repository#AddFile - Failed to copy data from input file to tar writer %s: %v", filePath, err)
-		return err
+		return NewError(err, fmt.Sprintf("Failed to copy data from input file %s to tar writer", filePath))
 	}
 
 	return nil
 }
 
-// NewTapeWriter creates a new tape writer.  Returns
+// NewTapeWriter creates a new tape writer.  It returns
 // a writeable repository or nil and an error if there's an error.  The repository
 // is conceptually a tape with a label and then the tape contents.  The label
 // contains a random AES256 key and a random initialization vector for the AES
@@ -106,33 +108,34 @@ func NewTapeWriter(key Key, repoFile io.Writer) (*TapeWriter, error) {
 	return result, nil
 }
 
-// ExtractFile extracts a file from the repository
-func (r *TapeReader) ExtractFile() error {
+// ExtractFile reads a file out of the tape and writes it onto the disk.
+// it uses metadata stored about the file to determine the file name
+// and any other characterisitics to set on the created file.
+func (r *TapeReader) ExtractFile(fs afero.Fs) error {
 	header, err := r.tarReader.Next()
 	if err == io.EOF {
 		return err
 	}
 	if err != nil {
-		log.Printf("Repository#ExtractFile - Failed to extract file from repository: %v", err)
-		return err
+		return NewError(err, "Failed to extract file from repository")
 	}
 
-	file, err := os.OpenFile(header.Name, os.O_WRONLY|os.O_CREATE, 0600)
+	file, err := fs.OpenFile(header.Name, os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
-		log.Printf("Repository#ExtractFile - Failed to open file %s for writing: %v", header.Name, err)
-		return err
+		return NewError(err, fmt.Sprintf("Failed to open file %s for writing", header.Name))
 	}
+	defer file.Close()
 
 	_, err = io.Copy(file, r.tarReader)
 	if err != nil {
-		log.Printf("Repository#ExtractFile - Failed to extract data for file %s: %v", header.Name, err)
-		return err
+		return NewError(err, fmt.Sprintf("Failed to extract file %s", header.Name))
 	}
 
 	return nil
 }
 
-// OpenTape opens a tape for reading
+// OpenTape opens a tape for reading.  It decrypts and verifies the label
+// and then set up the arhicve reader to read from the tape.
 func OpenTape(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, tape io.Reader) (*TapeReader, error) {
 	result := &TapeReader{}
 	result.Key.PrivateKey = privateKey
