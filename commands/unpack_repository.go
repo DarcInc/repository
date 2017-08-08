@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/darcinc/afero"
 	"github.com/darcinc/repository"
 )
 
@@ -26,13 +27,14 @@ func UnpackRepository(archive, privKeyName, pubKeyName string) {
 	}
 	defer file.Close()
 
-	repo, err := repository.OpenRepository(privateKey, publicKey, file)
+	repo, err := repository.OpenTape(privateKey, publicKey, file)
 	if err != nil {
 		log.Fatalf("Failed to open repository %s: %v", archive, err)
 	}
 
+	fs := afero.NewOsFs()
 	for err = nil; err == nil; {
-		err = repo.ExtractFile()
+		err = repo.ExtractFile(fs)
 		if err != nil {
 			if err != io.EOF {
 				log.Fatalf("Failed to extract file: %v", err)

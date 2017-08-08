@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/darcinc/afero"
 	"github.com/darcinc/repository"
 )
 
@@ -31,18 +32,16 @@ func PackRepository(archive, files, pubKeyName, privKeyName string) {
 		log.Fatalf("Failed to open archive %s: %v", archive, err)
 	}
 
-	repo, err := repository.CreateRepository(publicKey, privateKey, file)
+	key := repository.Key{PublicKey: publicKey, PrivateKey: privateKey}
+	repo, err := repository.NewTapeWriter(key, file)
 	if err != nil {
 		log.Fatalf("Failed to create repository %s: %v", archive, err)
 	}
 
+	fs := afero.NewOsFs()
 	for _, filepath := range parts {
-		if err = repo.AddFile(filepath); err != nil {
+		if err = repo.AddFile(fs, filepath); err != nil {
 			log.Printf("Failed to add file %s to repository: %v", filepath, err)
 		}
-	}
-
-	if err = repo.Seal(); err != nil {
-		log.Fatalf("Failed to seal %s repo: %v", archive, err)
 	}
 }
