@@ -43,6 +43,37 @@ type TapeWriter struct {
 	cryptoWriter io.Writer
 }
 
+// NewTapeWriter creates a new tape writer.  It returns
+// a writeable repository or nil and an error if there's an error.  The repository
+// is conceptually a tape with a label and then the tape contents.  The label
+// contains a random AES256 key and a random initialization vector for the AES
+// algorithm.  A SHA256 signature is generated for the two values.  The two values are
+// encrypted.  The complete label is considered the encrypted key, initialization
+// vector and the unencrypted signature.
+func NewTapeWriter(key Key, repoFile io.Writer) (*TapeWriter, error) {
+	result := &TapeWriter{Key: key}
+	var err error
+
+	result.Key.Label, err = RandomLabel()
+	if err != nil {
+		return nil, NewError(err, "Unable to generate new, random label")
+	}
+
+	err = result.Key.Label.WriteLabel(repoFile, key.PublicKey, key.PrivateKey)
+	if err != nil {
+		return nil, NewError(err, "Unable to write label into output writer")
+	}
+
+	result.cryptoWriter, err = result.Key.Label.OpenWriter(repoFile)
+	if err != nil {
+		return nil, NewError(err, "Unable to open respository writer")
+	}
+
+	result.tarWriter = tar.NewWriter(result.cryptoWriter)
+
+	return result, nil
+}
+
 // AddFile adds data to the tape by reading the contents of a file
 // a given path.  The writing occurs in two parts.  First in the
 // metadata about the file and then are the actual file contents.
@@ -77,36 +108,29 @@ func (r *TapeWriter) AddFile(fs afero.Fs, filePath string) error {
 	return nil
 }
 
-// NewTapeWriter creates a new tape writer.  It returns
-// a writeable repository or nil and an error if there's an error.  The repository
-// is conceptually a tape with a label and then the tape contents.  The label
-// contains a random AES256 key and a random initialization vector for the AES
-// algorithm.  A SHA256 signature is generated for the two values.  The two values are
-// encrypted.  The complete label is considered the encrypted key, initialization
-// vector and the unencrypted signature.
-func NewTapeWriter(key Key, repoFile io.Writer) (*TapeWriter, error) {
-	result := &TapeWriter{Key: key}
+
+// OpenTape opens a tape for reading.  It decrypts and verifies the label
+// and then set up the arhicve reader to read from the tape.
+func OpenTape(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, tape io.Reader) (*TapeReader, error) {
+	result := &TapeReader{}
+	result.Key.PrivateKey = privateKey
+	result.Key.PublicKey = publicKey
 	var err error
 
-	result.Key.Label, err = RandomLabel()
+	result.Key.Label, err = ReadLabel(tape, privateKey, publicKey)
 	if err != nil {
-		return nil, NewError(err, "Unable to generate new, random label")
+		return nil, NewError(err, "Unable to read respository label")
 	}
 
-	err = result.Key.Label.WriteLabel(repoFile, key.PublicKey, key.PrivateKey)
+	cryptoReader, err := result.Key.Label.OpenReader(tape)
 	if err != nil {
-		return nil, NewError(err, "Unable to write label into output writer")
+		return nil, NewError(err, "Unable to open a new crypto reader")
 	}
 
-	result.cryptoWriter, err = result.Key.Label.OpenWriter(repoFile)
-	if err != nil {
-		return nil, NewError(err, "Unable to open respository writer")
-	}
-
-	result.tarWriter = tar.NewWriter(result.cryptoWriter)
-
+	result.tarReader = tar.NewReader(cryptoReader)
 	return result, nil
 }
+
 
 // ExtractFile reads a file out of the tape and writes it onto the disk.
 // it uses metadata stored about the file to determine the file name
@@ -134,27 +158,6 @@ func (r *TapeReader) ExtractFile(fs afero.Fs) error {
 	return nil
 }
 
-// OpenTape opens a tape for reading.  It decrypts and verifies the label
-// and then set up the arhicve reader to read from the tape.
-func OpenTape(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, tape io.Reader) (*TapeReader, error) {
-	result := &TapeReader{}
-	result.Key.PrivateKey = privateKey
-	result.Key.PublicKey = publicKey
-	var err error
-
-	result.Key.Label, err = ReadLabel(tape, privateKey, publicKey)
-	if err != nil {
-		return nil, NewError(err, "Unable to read respository label")
-	}
-
-	cryptoReader, err := result.Key.Label.OpenReader(tape)
-	if err != nil {
-		return nil, NewError(err, "Unable to open a new crypto reader")
-	}
-
-	result.tarReader = tar.NewReader(cryptoReader)
-	return result, nil
-}
 
 // Contents returns the contents of a tape.  Each is an en
 func (r *TapeReader) Contents() ([]string, error) {
