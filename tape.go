@@ -155,3 +155,17 @@ func OpenTape(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, tape io.Read
 	result.tarReader = tar.NewReader(cryptoReader)
 	return result, nil
 }
+
+// Contents returns the contents of a tape.  Each is an en
+func (r *TapeReader) Contents() ([]string, error) {
+	result := []string{}
+
+	for header, err := r.tarReader.Next(); header != nil && err == nil; header, err = r.tarReader.Next() {
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, header.Name)
+	}
+	return result, nil
+}

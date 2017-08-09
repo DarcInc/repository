@@ -60,7 +60,7 @@ func setupFs() afero.Fs {
 	return fs
 }
 
-func createSimpleTape(fs afero.Fs) afero.Fs {
+func createSimpleTape(fs afero.Fs, files []string) afero.Fs {
 	backFile, err := fs.OpenFile("/backups/bk1.bak", os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to open backup file: %v", err))
@@ -71,7 +71,9 @@ func createSimpleTape(fs afero.Fs) afero.Fs {
 		panic(fmt.Sprintf("Failed to create new tape: %v", err))
 	}
 
-	tape.AddFile(fs, "/data/db/files/db1.dat")
+	for _, f := range files {
+		tape.AddFile(fs, f)
+	}
 	backFile.Close()
 
 	return fs
@@ -141,7 +143,7 @@ func TestTapeCreation(t *testing.T) {
 
 func TestSimpleTapeReading(t *testing.T) {
 	fs := setupFs()
-	createSimpleTape(fs)
+	createSimpleTape(fs, []string{"/data/db/files/db1.dat"})
 
 	file, err := fs.Open("/backups/bk1.bak")
 	if err != nil {
@@ -167,5 +169,75 @@ func TestSimpleTapeReading(t *testing.T) {
 
 	if fileinfo.Size() < 1024*1024 {
 		t.Errorf("Expected file size to be at last 1MB but got %d instead", fileinfo.Size())
+	}
+}
+
+func TestMultipleFiles(t *testing.T) {
+	fs := setupFs()
+	files := []string{"/data/db/files/db1.dat", "/data/db/files/db2.dat"}
+	createSimpleTape(fs, files)
+
+	for _, f := range files {
+		if err := fs.Remove(f); err != nil {
+			t.Fatalf("Failed to remove file: %s", f)
+		}
+	}
+
+	file, err := fs.Open("/backups/bk1.bak")
+	if err != nil {
+		t.Fatalf("Unable to open backup file: %v", err)
+	}
+
+	tr, err := OpenTape(tapeKey.PrivateKey, tapeKey.PublicKey, file)
+	if err != nil {
+		t.Fatalf("Unable open tape for reading")
+	}
+
+	err = tr.ExtractFile(fs)
+	if err != nil {
+		t.Fatalf("Failed to extract file: %v", err)
+	}
+
+	err = tr.ExtractFile(fs)
+	if err != nil {
+		t.Fatalf("Failed to extract file: %v", err)
+	}
+
+	for _, f := range files {
+		_, err := fs.Stat(f)
+		if err != nil {
+			t.Fatalf("Failed to get file info: %v", err)
+		}
+	}
+}
+
+func TestListContents(t *testing.T) {
+	fs := setupFs()
+	files := []string{"/data/db/files/db1.dat", "/data/db/files/db2.dat"}
+	createSimpleTape(fs, files)
+
+	file, err := fs.Open("/backups/bk1.bak")
+	if err != nil {
+		t.Fatalf("Unable to open backup file: %v", err)
+	}
+
+	tr, err := OpenTape(tapeKey.PrivateKey, tapeKey.PublicKey, file)
+	if err != nil {
+		t.Fatalf("Unable open tape for reading")
+	}
+
+	entries, err := tr.Contents()
+	if err != nil {
+		t.Fatalf("Unable to read contents")
+	}
+
+	if len(entries) != 2 {
+		t.Errorf("Expected 2 entries but got %d", len(entries))
+	}
+
+	for e := range files {
+		if files[e] != entries[e] {
+			t.Errorf("Expected %s but got %s", files[e], entries[e])
+		}
 	}
 }
