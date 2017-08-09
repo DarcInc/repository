@@ -5,6 +5,10 @@ for features you want to see.
 Checkout the [board](https://github.com/DarcInc/repository/projects/1)
 to see what's in the pipe.
 
+
+[![Build Status](https://travis-ci.org/DarcInc/repository.svg?branch=master)](https://travis-ci.org/DarcInc/repository)
+
+
 Create Secure Backups or Transfers
 ==================================
 
