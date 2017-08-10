@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
+	"io"
+	"testing"
 )
 
 var (
@@ -23,4 +25,20 @@ func generateTestKey(bits int) *rsa.PrivateKey {
 	}
 
 	return key
+}
+
+func TestError(t *testing.T) {
+	err := NewError(io.EOF, "This is an error")
+
+	if err.OriginalError != io.EOF {
+		t.Errorf("Incorrect error")
+	}
+
+	if err.Message != "This is an error" {
+		t.Errorf("Incorrect message")
+	}
+
+	if err.Error() != fmt.Sprintf("%s: %v", "This is an error", io.EOF) {
+		t.Errorf("Incorrect string representation")
+	}
 }
