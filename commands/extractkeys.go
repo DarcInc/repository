@@ -2,6 +2,7 @@ package commands
 
 import (
 	"io"
+	"os"
 
 	"crypto/x509"
 	"encoding/pem"
@@ -11,7 +12,20 @@ import (
 )
 
 // ExtractKeys extracts a key into PEM encoded formats
-func ExtractKeys(fs afero.Fs, keyfile, name string, out io.Writer) {
+func ExtractKeys(fs afero.Fs, keyfile, name, outfile string) {
+	if outfile != "" {
+		out, err := fs.OpenFile(outfile, os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			panic(err)
+		}
+		extractKeys(fs, keyfile, name, out)
+	} else {
+		extractKeys(fs, keyfile, name, os.Stdout)
+	}
+
+}
+
+func extractKeys(fs afero.Fs, keyfile, name string, out io.Writer) {
 	filename := repository.NamedKeystoreFile(keyfile)
 	file, err := fs.Open(filename)
 	if err != nil {

@@ -10,7 +10,7 @@ func TestExtractPrivateKeys(t *testing.T) {
 
 	bfr := new(bytes.Buffer)
 
-	ExtractKeys(fs, "foo", "test1", bfr)
+	extractKeys(fs, "foo", "test1", bfr)
 
 	re1 := regexp.MustCompile("RSA PRIVATE KEY")
 	re2 := regexp.MustCompile("RSA PUBLIC KEY")
@@ -29,7 +29,7 @@ func TestExtractPublicKeys(t *testing.T) {
 	addTestKeys(fs, t)
 
 	bfr := new(bytes.Buffer)
-	ExtractKeys(fs, "foo", "test2", bfr)
+	extractKeys(fs, "foo", "test2", bfr)
 
 	re1 := regexp.MustCompile("RSA PUBLIC KEY")
 

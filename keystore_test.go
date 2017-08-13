@@ -38,6 +38,21 @@ func createTestFs() (afero.Fs, error) {
 	return appfs, nil
 }
 
+func TestHomeDir(t *testing.T) {
+	dir := HomeDir()
+	if runtime.GOOS == "windows" {
+		target := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+		if dir != target {
+			t.Errorf("Expected %s but got %s", target, dir)
+		}
+	} else {
+		target := os.Getenv("HOME")
+		if dir != target {
+			t.Errorf("Expected %s but got %s", target, dir)
+		}
+	}
+}
+
 func TestAbsolutePathKeystoreExists(t *testing.T) {
 	appfs, err := createTestFs()
 	if err != nil {

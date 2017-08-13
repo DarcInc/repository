@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"log"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -14,15 +15,21 @@ import (
 	"github.com/darcinc/afero"
 )
 
-// KeystoreDefaultDirectory returns the default directory for named keystores.
-// By default the default directory is in the user's home directory and the
-// .repkey "hidden director".  E.g. (/home/joeuser/.repkey on Unix.)
-func KeystoreDefaultDirectory() string {
+// HomeDir returns the user's home directory.
+func HomeDir() string {
 	homedir := os.Getenv("HOME")
 	if runtime.GOOS == "windows" {
 		homedir = os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 	}
-	return filepath.Join(homedir, ".repkey")
+	return homedir
+}
+
+// KeystoreDefaultDirectory returns the default directory for named keystores.
+// By default the default directory is in the user's home directory and the
+// .repkey "hidden director".  E.g. (/home/joeuser/.repkey on Unix.)
+func KeystoreDefaultDirectory() string {
+
+	return filepath.Join(HomeDir(), ".repkey")
 }
 
 // NamedKeystoreFile returns a named keystore file from the user's default
@@ -76,6 +83,15 @@ func CreateKeystore(fs afero.Fs, name string) (*Keystore, error) {
 	result := &Keystore{}
 	result.PrivateKeys = make(map[string][]byte)
 	result.PublicKeys = make(map[string][]byte)
+
+	directory := filepath.Dir(name)
+	_, err := fs.Stat(directory)
+	if err != nil {
+		err := fs.MkdirAll(directory, 0700)
+		if err != nil {
+			log.Fatalf("Failed to crete directory %s: %v", directory, err)
+		}
+	}
 
 	file, err := fs.OpenFile(NamedKeystoreFile(name), os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 	if err != nil {

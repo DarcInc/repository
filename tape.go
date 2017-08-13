@@ -108,7 +108,6 @@ func (r *TapeWriter) AddFile(fs afero.Fs, filePath string) error {
 	return nil
 }
 
-
 // OpenTape opens a tape for reading.  It decrypts and verifies the label
 // and then set up the arhicve reader to read from the tape.
 func OpenTape(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, tape io.Reader) (*TapeReader, error) {
@@ -130,7 +129,6 @@ func OpenTape(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, tape io.Read
 	result.tarReader = tar.NewReader(cryptoReader)
 	return result, nil
 }
-
 
 // ExtractFile reads a file out of the tape and writes it onto the disk.
 // it uses metadata stored about the file to determine the file name
@@ -157,7 +155,6 @@ func (r *TapeReader) ExtractFile(fs afero.Fs) error {
 
 	return nil
 }
-
 
 // Contents returns the contents of a tape.  Each is an en
 func (r *TapeReader) Contents() ([]string, error) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 
 	"github.com/darcinc/afero"
@@ -12,25 +13,46 @@ func about() {
 	flag.Usage()
 }
 
+func validateArguments(action, keyname, keyfile, pemfile string, cipherStrength int) bool {
+	switch {
+	case action == "about":
+		about()
+	case action == "import":
+		if keyname == "" {
+			fmt.Println("A key name for the imported key is required when importing a key/")
+			return false
+		}
+		if pemfile == "" {
+			fmt.Println("The pem file to import is required when importing a key.")
+			return false
+		}
+
+	case action == "export":
+		if keyname == "" {
+			fmt.Println("The name of the key to export is required.")
+			return false
+		}
+	}
+
+	return true
+}
+
 func main() {
 	var (
-		action, archive, files, publicKey, privateKey, keyName string
-		keyfile                                                string
-		cipherStrength                                         int
+		action, keyName  string
+		keyfile, pemfile string
+		cipherStrength   int
 	)
-	flag.StringVar(&action, "action", "about", "What to do (pack, list, unpack, create-keys, list-keys, about)")
-	flag.StringVar(&archive, "archive", "", "The name of the archive (required for pack, list, and unpack)")
-	flag.StringVar(&files, "files", "", "Comma separated list of files (required for pack)")
-	flag.StringVar(&publicKey, "publicKey", "", "Public key to use for encryption (required for pack)")
-	flag.StringVar(&privateKey, "privateKey", "", "Private key to use for signing or decryption (required for pack and unpack)")
-	flag.StringVar(&keyName, "keyName", "", "The name of the key (required for create key)")
+	flag.StringVar(&action, "action", "about", "What to do (create, list, export, import)")
+	flag.StringVar(&keyName, "keyName", "", "The name of the key (required for create or import key)")
 	flag.StringVar(&keyfile, "keyFile", "keys", "The name of the keystore, can be the name or an absolute path")
+	flag.StringVar(&pemfile, "pemFile", "", "The pem encoded key file to import")
 	flag.IntVar(&cipherStrength, "bits", 4096, "The number of bits for the RSA key")
 
 	flag.Parse()
 
-	if !commands.ValidateArguments(action, archive, files, privateKey, publicKey, keyName) {
-		log.Printf("Unable to continue")
+	if !validateArguments(action, keyName, keyfile, pemfile, cipherStrength) {
+		log.Printf("Unable to continue, invalid or missing arguments")
 		about()
 		return
 	}
@@ -38,16 +60,14 @@ func main() {
 	fs := afero.NewOsFs()
 
 	switch action {
-	case "pack":
-		commands.PackRepository(archive, files, publicKey, privateKey)
-	case "list":
-		commands.ListContents(archive)
-	case "unpack":
-		commands.UnpackRepository(archive, publicKey, privateKey)
-	case "create-keys":
+	case "create":
 		commands.CreateKeys(fs, keyName, keyfile, cipherStrength)
-	case "list-keys":
+	case "list":
 		commands.ListKeys(fs, keyfile)
+	case "import":
+		commands.ImportKey(fs, keyfile, keyName, pemfile)
+	case "export":
+		panic("Not implemented")
 	case "about":
 		about()
 	}
