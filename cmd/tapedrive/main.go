@@ -14,10 +14,14 @@ func about() {
 }
 
 // ValidateArguments checks to see that all arguments are correct.
-func validateArguments(action, archive, files, publicKey, privateKey string) bool {
+func validateArguments(action, archive, files, keystore, publicKey, privateKey string) bool {
 	result := true
 	switch action {
 	case "pack":
+		if archive == "" {
+			log.Printf("Packing an archive requires a path to an archive")
+			return false
+		}
 		if files == "" {
 			log.Printf("Packing an archive requires a list of files")
 			result = false
@@ -48,6 +52,14 @@ func validateArguments(action, archive, files, publicKey, privateKey string) boo
 			log.Printf("When listing contents you must specify an archive")
 			result = false
 		}
+		if privateKey == "" {
+			log.Printf("When listing contents you must specify a key name")
+			result = false
+		}
+		if publicKey == "" {
+			log.Printf("When listing contetns you must specify a public key")
+			result = false
+		}
 	}
 	return result
 }
@@ -66,7 +78,7 @@ func main() {
 	flag.StringVar(&keystore, "keystore", "keys", "The name of the keystore containing the keys")
 	flag.Parse()
 
-	if !validateArguments(action, archive, files, pubkey, privkey) {
+	if !validateArguments(action, archive, files, pubkey, keystore, privkey) {
 		log.Printf("Unable to continue, invalid or missing arguments")
 		about()
 		return
@@ -82,6 +94,6 @@ func main() {
 	case "list":
 		commands.ListContents(fs, archive, keystore, pubkey, privkey, os.Stdout)
 	case "about":
-		about()
+		flag.Usage()
 	}
 }

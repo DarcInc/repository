@@ -19,7 +19,7 @@ func validateArguments(action, keyname, keyfile, pemfile string, cipherStrength 
 		about()
 	case action == "import":
 		if keyname == "" {
-			fmt.Println("A key name for the imported key is required when importing a key/")
+			fmt.Println("A key name for the imported key is required when importing a key.")
 			return false
 		}
 		if pemfile == "" {
@@ -30,6 +30,15 @@ func validateArguments(action, keyname, keyfile, pemfile string, cipherStrength 
 	case action == "export":
 		if keyname == "" {
 			fmt.Println("The name of the key to export is required.")
+			return false
+		}
+	case action == "create":
+		if keyname == "" {
+			fmt.Println("The name of the key is required when creating a new key")
+			return false
+		}
+		if !(cipherStrength == 1024 || cipherStrength == 2048 || cipherStrength == 4096 || cipherStrength == 8192) {
+			fmt.Println("Valid bits for cipher strength are 1024 (not recommended), 2048, 4096, or 8192")
 			return false
 		}
 	}
@@ -67,7 +76,7 @@ func main() {
 	case "import":
 		commands.ImportKey(fs, keyfile, keyName, pemfile)
 	case "export":
-		panic("Not implemented")
+		commands.ExtractKeys(fs, keyfile, keyName, pemfile)
 	case "about":
 		about()
 	}
