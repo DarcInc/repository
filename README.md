@@ -7,6 +7,7 @@ to see what's in the pipe.
 
 
 [![Build Status](https://travis-ci.org/DarcInc/repository.svg?branch=master)](https://travis-ci.org/DarcInc/repository)
+[![Go Report Card](https://goreportcard.com/badge/github.com/darcinc/repository)](https://goreportcard.com/report/github.com/darcinc/repository)
 
 
 Create Secure Backups or Transfers

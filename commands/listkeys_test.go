@@ -38,6 +38,13 @@ func addTestKeys(fs afero.Fs, t *testing.T) {
 
 	keys.AddPublicKey("test2", &priv2.PublicKey)
 
+	priv3, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keys.AddPrivateKey("test3", priv3)
+
 	file, err = fs.OpenFile(keysName, os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		t.Fatal(err)

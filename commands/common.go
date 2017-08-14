@@ -3,55 +3,15 @@ package commands
 import (
 	"crypto/rsa"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
-)
 
-// ValidateArguments checks to see that all arguments are correct.
-func ValidateArguments(action, archive, files, publicKey, privateKey, keyName string) bool {
-	result := true
-	switch action {
-	case "pack":
-		if files == "" {
-			log.Printf("Packing an archive requires a list of files")
-			result = false
-		}
-		if publicKey == "" {
-			log.Printf("Packing an archive requires a key name")
-			result = false
-		}
-		if privateKey == "" {
-			log.Printf("Packing an archive requries a private key name")
-			result = false
-		}
-	case "unpack":
-		if archive == "" {
-			log.Printf("When unpacking contents you must specify an archive")
-			result = false
-		}
-		if privateKey == "" {
-			log.Printf("When unpacking contents you must specify a key name")
-			result = false
-		}
-		if publicKey == "" {
-			log.Printf("When unpacking contetns you must specify a public key")
-			result = false
-		}
-	case "create-keys":
-		if keyName == "" {
-			log.Printf("When creating keys you must specify a keyname")
-			result = false
-		}
-	case "list":
-		if archive == "" {
-			log.Printf("When listing contents you must specify an archive")
-			result = false
-		}
-	}
-	return result
-}
+	"github.com/darcinc/afero"
+	"github.com/darcinc/repository"
+)
 
 func writeKeyPairToFile(key *rsa.PrivateKey, filename string) error {
 	privateKeyName := fmt.Sprintf("%s.key", filename)
@@ -111,4 +71,31 @@ func readPublicKeyFromFile(filename string) (*rsa.PublicKey, error) {
 
 	rsaPublicKey := publicKey.(*rsa.PublicKey)
 	return rsaPublicKey, nil
+}
+
+func readKeysFromKeystore(fs afero.Fs, keystoreName, privKeyName, pubKeyName string) (*rsa.PrivateKey, *rsa.PublicKey, error) {
+	keystorePath := repository.KeystorePath(keystoreName)
+
+	file, err := fs.Open(keystorePath)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer file.Close()
+
+	keystore, err := repository.OpenKeystore(file)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	privateKey, ok := keystore.FindPrivateKey(privKeyName)
+	if !ok {
+		return nil, nil, errors.New("Private key not found error")
+	}
+
+	publicKey, ok := keystore.FindPublicKey(pubKeyName)
+	if !ok {
+		return nil, nil, errors.New("Public key not found error")
+	}
+
+	return privateKey, publicKey, nil
 }

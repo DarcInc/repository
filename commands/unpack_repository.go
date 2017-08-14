@@ -3,25 +3,19 @@ package commands
 import (
 	"io"
 	"log"
-	"os"
 
 	"github.com/darcinc/afero"
 	"github.com/darcinc/repository"
 )
 
 // UnpackRepository unpacks a repository
-func UnpackRepository(archive, privKeyName, pubKeyName string) {
-	privateKey, err := readPrivateKeyFromFile(privKeyName)
+func UnpackRepository(fs afero.Fs, archive, keystore, privKeyName, pubKeyName string) {
+	privateKey, publicKey, err := readKeysFromKeystore(fs, keystore, privKeyName, pubKeyName)
 	if err != nil {
-		log.Fatalf("Failed to read private key %s from file: %v", privKeyName, err)
+		log.Fatalf("Failed to find public or private keys: %v", err)
 	}
 
-	publicKey, err := readPublicKeyFromFile(pubKeyName)
-	if err != nil {
-		log.Fatalf("Failed to read public key %s from file: %v", pubKeyName, err)
-	}
-
-	file, err := os.Open(archive)
+	file, err := fs.Open(archive)
 	if err != nil {
 		log.Fatalf("Failed to open archive %s: %v", archive, err)
 	}
@@ -32,7 +26,6 @@ func UnpackRepository(archive, privKeyName, pubKeyName string) {
 		log.Fatalf("Failed to open repository %s: %v", archive, err)
 	}
 
-	fs := afero.NewOsFs()
 	for err = nil; err == nil; {
 		err = repo.ExtractFile(fs)
 		if err != nil {
