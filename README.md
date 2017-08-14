@@ -8,6 +8,7 @@ to see what's in the pipe.
 
 [![Build Status](https://travis-ci.org/DarcInc/repository.svg?branch=master)](https://travis-ci.org/DarcInc/repository)
 [![Go Report Card](https://goreportcard.com/badge/github.com/darcinc/repository)](https://goreportcard.com/report/github.com/darcinc/repository)
+[![Coverage Status](https://coveralls.io/repos/github/DarcInc/repository/badge.svg?branch=master)](https://coveralls.io/github/DarcInc/repository?branch=master)
 
 
 Create Secure Backups or Transfers
