@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/darcinc/afero"
@@ -18,22 +20,31 @@ var (
 	}
 )
 
+func pathFor(parts ...string) string {
+	if runtime.GOOS == "windows" {
+		parts = append([]string{"C:\\"}, parts...)
+	} else {
+		parts = append([]string{"/"}, parts...)
+	}
+	return filepath.Join(parts...)
+}
+
 func setupFs() afero.Fs {
 	fs := afero.NewMemMapFs()
 
-	if err := fs.MkdirAll("/data/db/files", 0755); err != nil {
+	if err := fs.MkdirAll(pathFor("data", "db", "files"), 0755); err != nil {
 		panic(err)
 	}
 
-	if err := fs.MkdirAll("/data/config", 0755); err != nil {
+	if err := fs.MkdirAll(pathFor("data", "config"), 0755); err != nil {
 		panic(err)
 	}
 
-	if err := fs.MkdirAll("/backups", 0700); err != nil {
+	if err := fs.MkdirAll(pathFor("backups"), 0700); err != nil {
 		panic(err)
 	}
 
-	if file, err := fs.OpenFile("/data/db/files/db1.dat", os.O_CREATE|os.O_WRONLY, 0666); err != nil {
+	if file, err := fs.OpenFile(pathFor("data", "db", "files", "db1.dat"), os.O_CREATE|os.O_WRONLY, 0666); err != nil {
 		panic(err)
 	} else {
 		for i := 0; i < 128*1024; i++ {
@@ -45,7 +56,7 @@ func setupFs() afero.Fs {
 		file.Close()
 	}
 
-	if file, err := fs.OpenFile("/data/db/files/db2.dat", os.O_CREATE|os.O_WRONLY, 0666); err != nil {
+	if file, err := fs.OpenFile(pathFor("data", "db", "files", "db2.dat"), os.O_CREATE|os.O_WRONLY, 0666); err != nil {
 		panic(err)
 	} else {
 		for i := 0; i < 64*1024; i++ {
@@ -61,7 +72,7 @@ func setupFs() afero.Fs {
 }
 
 func createSimpleTape(fs afero.Fs, files []string) afero.Fs {
-	backFile, err := fs.OpenFile("/backups/bk1.bak", os.O_CREATE|os.O_RDWR, 0600)
+	backFile, err := fs.OpenFile(pathFor("backups", "bk1.bak"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to open backup file: %v", err))
 	}
@@ -95,7 +106,7 @@ func TestCreateTape(t *testing.T) {
 
 func TestTapeCreation(t *testing.T) {
 	fs := setupFs()
-	backFile, err := fs.OpenFile("/backups/bk1.bak", os.O_CREATE|os.O_RDWR, 0600)
+	backFile, err := fs.OpenFile(pathFor("backups", "bk1.bak"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		t.Fatalf("Failed to open backup file: %v", err)
 	}
@@ -105,10 +116,10 @@ func TestTapeCreation(t *testing.T) {
 		t.Fatalf("Failed to create new tape: %v", err)
 	}
 
-	tape.AddFile(fs, "/data/db/files/db1.dat")
+	tape.AddFile(fs, pathFor("data", "db", "files", "db1.dat"))
 	backFile.Close()
 
-	fileinfo, err := fs.Stat("/backups/bk1.bak")
+	fileinfo, err := fs.Stat(pathFor("backups", "bk1.bak"))
 	if err != nil {
 		t.Fatalf("Failed to stat backup file: %v", err)
 	}
@@ -117,7 +128,7 @@ func TestTapeCreation(t *testing.T) {
 		t.Errorf("Expected at least 1MB in size but got: %d", fileinfo.Size())
 	}
 
-	file, err := fs.Open("/backups/bk1.bak")
+	file, err := fs.Open(pathFor("backups", "bk1.bak"))
 	if err != nil {
 		t.Fatalf("Unable to open backup file: %v", err)
 	}
@@ -143,9 +154,9 @@ func TestTapeCreation(t *testing.T) {
 
 func TestSimpleTapeReading(t *testing.T) {
 	fs := setupFs()
-	createSimpleTape(fs, []string{"/data/db/files/db1.dat"})
+	createSimpleTape(fs, []string{pathFor("data", "db", "files", "db1.dat")})
 
-	file, err := fs.Open("/backups/bk1.bak")
+	file, err := fs.Open(pathFor("backups", "bk1.bak"))
 	if err != nil {
 		t.Fatalf("Unable to open backup file: %v", err)
 	}
@@ -155,14 +166,14 @@ func TestSimpleTapeReading(t *testing.T) {
 		t.Fatalf("Unable open tape for reading")
 	}
 
-	fs.Remove("/data/db/files/db1.dat")
+	fs.Remove(pathFor("data", "db", "files", "db1.dat"))
 
 	err = tr.ExtractFile(fs)
 	if err != nil {
 		t.Fatalf("Failed to extract file: %v", err)
 	}
 
-	fileinfo, err := fs.Stat("/data/db/files/db1.dat")
+	fileinfo, err := fs.Stat(pathFor("data", "db", "files", "db1.dat"))
 	if err != nil {
 		t.Fatalf("Failed to get file info: %v", err)
 	}
@@ -174,7 +185,10 @@ func TestSimpleTapeReading(t *testing.T) {
 
 func TestMultipleFiles(t *testing.T) {
 	fs := setupFs()
-	files := []string{"/data/db/files/db1.dat", "/data/db/files/db2.dat"}
+	files := []string{
+		pathFor("data", "db", "files", "db1.dat"),
+		pathFor("data", "db", "files", "db2.dat"),
+	}
 	createSimpleTape(fs, files)
 
 	for _, f := range files {
@@ -183,7 +197,7 @@ func TestMultipleFiles(t *testing.T) {
 		}
 	}
 
-	file, err := fs.Open("/backups/bk1.bak")
+	file, err := fs.Open(pathFor("backups", "bk1.bak"))
 	if err != nil {
 		t.Fatalf("Unable to open backup file: %v", err)
 	}
@@ -213,10 +227,13 @@ func TestMultipleFiles(t *testing.T) {
 
 func TestListContents(t *testing.T) {
 	fs := setupFs()
-	files := []string{"/data/db/files/db1.dat", "/data/db/files/db2.dat"}
+	files := []string{
+		pathFor("data", "db", "files", "db1.dat"),
+		pathFor("data", "db", "files", "db2.dat"),
+	}
 	createSimpleTape(fs, files)
 
-	file, err := fs.Open("/backups/bk1.bak")
+	file, err := fs.Open(pathFor("backups", "bk1.bak"))
 	if err != nil {
 		t.Fatalf("Unable to open backup file: %v", err)
 	}
@@ -239,5 +256,51 @@ func TestListContents(t *testing.T) {
 		if files[e] != entries[e] {
 			t.Errorf("Expected %s but got %s", files[e], entries[e])
 		}
+	}
+}
+
+func TestAddDirectory(t *testing.T) {
+	fs := setupFs()
+	file, err := fs.OpenFile(pathFor("backups", "bk1.bak"), os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		t.Fatalf("Failed to open backup file: %v", err)
+	}
+
+	tape, err := NewTapeWriter(tapeKey, file)
+	if err != nil {
+		t.Fatalf("Unable to open tape for writing: %v", err)
+	}
+
+	tape.AddDirectory(fs, pathFor("data", "db"))
+	file.Close()
+
+	fs.Remove(pathFor("data", "db", "files", "db1.dat"))
+	fs.Remove(pathFor("data", "db", "files", "db2.dat"))
+
+	file, err = fs.Open(pathFor("backups", "bk1.bak"))
+	if err != nil {
+		t.Fatalf("Unable to open backup tape file: %v", err)
+	}
+	defer file.Close()
+
+	tr, err := OpenTape(tapeKey.PrivateKey, tapeKey.PublicKey, file)
+	if err != nil {
+		t.Fatalf("Unable to open backup tape: %v", err)
+	}
+
+	if err = tr.ExtractFile(fs); err != nil {
+		t.Fatalf("Unable to extract file from archive: %v", err)
+	}
+
+	if err = tr.ExtractFile(fs); err != nil {
+		t.Fatalf("Unable to extract file from archive: %v", err)
+	}
+
+	if _, err = fs.Stat(pathFor("data", "db", "files", "db1.dat")); err != nil {
+		t.Errorf("Unable to find restored file: %v", err)
+	}
+
+	if _, err = fs.Stat(pathFor("data", "db", "files", "db2.dat")); err != nil {
+		t.Errorf("Unable to find restored file: %v", err)
 	}
 }

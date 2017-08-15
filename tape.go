@@ -108,6 +108,19 @@ func (r *TapeWriter) AddFile(fs afero.Fs, filePath string) error {
 	return nil
 }
 
+// AddDirectory adds an entire directory and its contents at one time
+func (r *TapeWriter) AddDirectory(fs afero.Fs, dirpath string) error {
+	err := afero.Walk(fs, dirpath, func(path string, info os.FileInfo, err error) error {
+		if err == nil {
+			if !info.IsDir() {
+				return r.AddFile(fs, path)
+			}
+		}
+		return nil
+	})
+	return err
+}
+
 // OpenTape opens a tape for reading.  It decrypts and verifies the label
 // and then set up the arhicve reader to read from the tape.
 func OpenTape(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, tape io.Reader) (*TapeReader, error) {

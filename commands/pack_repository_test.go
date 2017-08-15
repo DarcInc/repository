@@ -36,14 +36,65 @@ func packTestRepository(fs afero.Fs) {
 	}
 	archive := filepath.Join(repository.HomeDir(), "archive1")
 
-	PackRepository(fs, archive, strings.Join(files, ","), "foo", "test1", "test3")
+	args := make(map[string]string)
+	args["archive"] = archive
+	args["files"] = strings.Join(files, ",")
+	args["keystore"] = "foo"
+	args["pubkey"] = "test1"
+	args["privkey"] = "test3"
+
+	PackRepository(fs, args)
 }
 
-func TestPackRepository(t *testing.T) {
+func packTestRepositoryDirectory(fs afero.Fs) {
+	archive := filepath.Join(repository.HomeDir(), "archive1")
+
+	args := make(map[string]string)
+	args["archive"] = archive
+	args["directory"] = repository.HomeDir()
+	args["keystore"] = "foo"
+	args["pubkey"] = "test1"
+	args["privkey"] = "test3"
+
+	PackRepository(fs, args)
+}
+
+func TestPackFilesRepository(t *testing.T) {
 	fs := createFSWithKeystore(t)
 	addTestKeys(fs, t)
 	createTestData(fs)
 	packTestRepository(fs)
+
+	archive := filepath.Join(repository.HomeDir(), "archive1")
+
+	if fileinfo, err := fs.Stat(archive); err != nil {
+		t.Errorf("Failed to find archive: %v", err)
+	} else {
+		if fileinfo.Size() < 23 {
+			t.Errorf("Invalid file size")
+		}
+
+		file, err := fs.Open(archive)
+		if err != nil {
+			t.Fatalf("Failed to open archive: %v", err)
+		}
+		defer file.Close()
+
+		s := bufio.NewScanner(file)
+		s.Split(bufio.ScanWords)
+		for s.Scan() {
+			if s.Text() == "World" || s.Text() == "Goodbye" || s.Text() == "Hello" {
+				t.Errorf("Found cleartext in archive")
+			}
+		}
+	}
+}
+
+func TestPackDirectoryRepository(t *testing.T) {
+	fs := createFSWithKeystore(t)
+	addTestKeys(fs, t)
+	createTestData(fs)
+	packTestRepositoryDirectory(fs)
 
 	archive := filepath.Join(repository.HomeDir(), "archive1")
 
