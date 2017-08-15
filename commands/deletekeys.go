@@ -23,6 +23,7 @@ func DeleteKeys(fs afero.Fs, keyfile, name string) {
 
 	keystore.RemoveKey(name)
 
+	// This isn't testable using the in-memory filesystem
 	file, err = fs.OpenFile(filename, os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		panic(err)

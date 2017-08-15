@@ -63,8 +63,8 @@ func TestListKeys(t *testing.T) {
 	bf := new(bytes.Buffer)
 
 	listKeys(fs, "foo", bf)
-	re1 := regexp.MustCompile("Private Keys.*\\s+test1")
-	re2 := regexp.MustCompile("Public Keys.*\\s+test2")
+	re1 := regexp.MustCompile("test1")
+	re2 := regexp.MustCompile("test2")
 
 	if !re1.Match(bf.Bytes()) {
 		t.Error("Failed to find private keys in list")

@@ -1,7 +1,11 @@
 package commands
 
-import "testing"
-import "github.com/darcinc/repository"
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/darcinc/repository"
+)
 
 func TestDeleteKeys(t *testing.T) {
 	fs := createFSWithKeystore(t)
@@ -24,4 +28,34 @@ func TestDeleteKeys(t *testing.T) {
 	if ok {
 		t.Error("Key should have been deleted")
 	}
+}
+
+func TestInvalidKeystorePanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+
+		}
+	}()
+
+	fs := createFSWithKeystore(t)
+	DeleteKeys(fs, "bar", "test1")
+	t.Error("Failed to panic with invalid keystore")
+}
+
+func TestBadKeystorePanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+
+		}
+	}()
+
+	fs := createFSWithKeystore(t)
+	f, err := fs.Create(filepath.Join(repository.HomeDir(), "bad.sqlite"))
+	if err != nil {
+		t.Fatalf("Unable to create bad input file")
+	}
+	f.Close()
+
+	DeleteKeys(fs, filepath.Join(repository.HomeDir(), "bad.sqlite"), "test1")
+	t.Error("Failed to panic with invalid keystore")
 }
