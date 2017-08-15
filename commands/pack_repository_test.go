@@ -42,6 +42,7 @@ func packTestRepository(fs afero.Fs) {
 	args["keystore"] = "foo"
 	args["pubkey"] = "test1"
 	args["privkey"] = "test3"
+	args["directory"] = ""
 
 	PackRepository(fs, args)
 }
@@ -55,6 +56,7 @@ func packTestRepositoryDirectory(fs afero.Fs) {
 	args["keystore"] = "foo"
 	args["pubkey"] = "test1"
 	args["privkey"] = "test3"
+	args["files"] = ""
 
 	PackRepository(fs, args)
 }
@@ -119,4 +121,27 @@ func TestPackDirectoryRepository(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestNoFilesNoDir(t *testing.T) {
+	fs := createFSWithKeystore(t)
+	addTestKeys(fs, t)
+	createTestData(fs)
+
+	archive := filepath.Join(repository.HomeDir(), "archive1")
+
+	args := make(map[string]string)
+	args["archive"] = archive
+	args["directory"] = ""
+	args["keystore"] = "foo"
+	args["pubkey"] = "test1"
+	args["privkey"] = "test3"
+	args["files"] = ""
+
+	defer func() {
+		recover()
+	}()
+
+	PackRepository(fs, args)
+	t.Error("Should not allow packing without files or directory")
 }
