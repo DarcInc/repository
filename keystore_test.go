@@ -26,7 +26,7 @@ func createTestFs() (afero.Fs, error) {
 		}
 	}
 
-	filename := "keystore.sqlite"
+	filename := "keystore.keys"
 
 	appfs.MkdirAll(filepath.Join(userHome, ".repkey"), 0700)
 	file, err := appfs.Create(filepath.Join(userHome, ".repkey", filename))
@@ -63,7 +63,7 @@ func TestAbsolutePathKeystoreExists(t *testing.T) {
 		homedir = os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 	}
 
-	fullPath, err := filepath.Abs(filepath.Join(homedir, ".repkey", "keystore.sqlite"))
+	fullPath, err := filepath.Abs(filepath.Join(homedir, ".repkey", "keystore.keys"))
 	if err != nil {
 		t.Fatalf("TestAbsolutePathKeystoreExists - Error creating absolute path: %v", err)
 	}

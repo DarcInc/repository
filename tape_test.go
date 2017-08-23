@@ -152,6 +152,26 @@ func TestTapeCreation(t *testing.T) {
 	}
 }
 
+func TestCreateTapeBadFile(t *testing.T) {
+	fs := setupFs()
+	backFile, err := fs.OpenFile(pathFor("backups", "bk1.bak"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatalf("Failed to open backup file: %v", err)
+	}
+	defer backFile.Close()
+
+	tape, err := NewTapeWriter(tapeKey, backFile)
+	if err != nil {
+		t.Fatalf("Failed to create new tape: %v", err)
+	}
+
+	err = tape.AddFile(fs, pathFor("data", "db", "files", "db7.dat"))
+	if err == nil {
+		t.Errorf("Should have been an error archive non existant file")
+	}
+
+}
+
 func TestSimpleTapeReading(t *testing.T) {
 	fs := setupFs()
 	createSimpleTape(fs, []string{pathFor("data", "db", "files", "db1.dat")})
@@ -160,6 +180,7 @@ func TestSimpleTapeReading(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to open backup file: %v", err)
 	}
+	defer file.Close()
 
 	tr, err := OpenTape(tapeKey.PrivateKey, tapeKey.PublicKey, file)
 	if err != nil {
@@ -201,6 +222,7 @@ func TestMultipleFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to open backup file: %v", err)
 	}
+	defer file.Close()
 
 	tr, err := OpenTape(tapeKey.PrivateKey, tapeKey.PublicKey, file)
 	if err != nil {
@@ -222,6 +244,33 @@ func TestMultipleFiles(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to get file info: %v", err)
 		}
+	}
+}
+
+func TestReadPastEnd(t *testing.T) {
+	fs := setupFs()
+	files := []string{
+		pathFor("data", "db", "files", "db1.dat"),
+		pathFor("data", "db", "files", "db2.dat"),
+	}
+	createSimpleTape(fs, files)
+
+	file, err := fs.Open(pathFor("backups", "bk1.bak"))
+	if err != nil {
+		t.Fatalf("Unable to open backup file: %v", err)
+	}
+	defer file.Close()
+
+	tr, err := OpenTape(tapeKey.PrivateKey, tapeKey.PublicKey, file)
+	if err != nil {
+		t.Fatalf("Unable open tape for reading")
+	}
+
+	tr.ExtractFile(fs)
+	tr.ExtractFile(fs)
+	err = tr.ExtractFile(fs)
+	if err == nil {
+		t.Fatalf("Should have gotten an eof error: %v", err)
 	}
 }
 
