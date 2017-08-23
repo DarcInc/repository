@@ -38,7 +38,7 @@ func NamedKeystoreFile(location string) string {
 	if filepath.IsAbs(location) {
 		return location
 	}
-	return filepath.Join(KeystoreDefaultDirectory(), location+".sqlite")
+	return filepath.Join(KeystoreDefaultDirectory(), location+".keys")
 }
 
 func keystoreExists(fs afero.Fs, location string) (bool, error) {
