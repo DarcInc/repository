@@ -16,6 +16,7 @@ func ExtractKeys(fs afero.Fs, keyfile, name, outfile string) {
 	if outfile != "" {
 		out, err := fs.OpenFile(outfile, os.O_WRONLY|os.O_CREATE, 0600)
 		if err != nil {
+			// Unable to test using in-memory filesystem
 			panic(err)
 		}
 		extractKeys(fs, keyfile, name, out)
