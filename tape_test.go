@@ -56,6 +56,10 @@ func setupFs() afero.Fs {
 		file.Close()
 	}
 
+	if err := fs.Chmod(pathFor("data", "db", "files", "db1.dat"), 0641); err != nil {
+		panic(err)
+	}
+
 	if file, err := fs.OpenFile(pathFor("data", "db", "files", "db2.dat"), os.O_CREATE|os.O_WRONLY, 0666); err != nil {
 		panic(err)
 	} else {
@@ -351,5 +355,54 @@ func TestAddDirectory(t *testing.T) {
 
 	if _, err = fs.Stat(pathFor("data", "db", "files", "db2.dat")); err != nil {
 		t.Errorf("Unable to find restored file: %v", err)
+	}
+}
+
+func TestSavePermissionBits(t *testing.T) {
+	fs := setupFs()
+	file, err := fs.OpenFile(pathFor("backups", "bk1.bak"), os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		t.Fatalf("Failed to open backup file: %v", err)
+	}
+
+	tape, err := NewTapeWriter(tapeKey, file)
+	if err != nil {
+		t.Fatalf("Unable to open tape for writing: %v", err)
+	}
+
+	tape.AddDirectory(fs, pathFor("data", "db"))
+	file.Close()
+
+	fs.Remove(pathFor("data", "db", "files", "db1.dat"))
+	fs.Remove(pathFor("data", "db", "files", "db2.dat"))
+
+	file, err = fs.Open(pathFor("backups", "bk1.bak"))
+	if err != nil {
+		t.Fatalf("Unable to open backup tape file: %v", err)
+	}
+	defer file.Close()
+
+	tr, err := OpenTape(tapeKey.PrivateKey, tapeKey.PublicKey, file)
+	if err != nil {
+		t.Fatalf("Unable to open backup tape: %v", err)
+	}
+
+	tr.ExtractFile(fs)
+	tr.ExtractFile(fs)
+
+	if fileinfo, err := fs.Stat(pathFor("data", "db", "files", "db1.dat")); err != nil {
+		t.Fatalf("Unable to stat file which should exist: %v", err)
+	} else {
+		if !(fileinfo.Mode().Perm()^0641 == 0) {
+			t.Errorf("Expected permissions to be 641 but got %v", fileinfo.Mode())
+		}
+	}
+
+	if fileinfo, err := fs.Stat(pathFor("data", "db", "files", "db2.dat")); err != nil {
+		t.Fatalf("Unable to stat file which should exist: %v", err)
+	} else {
+		if fileinfo.Mode().Perm()^0641 == 0 {
+			t.Errorf("Expected permissions not to be 641 but got %v", fileinfo.Mode())
+		}
 	}
 }
