@@ -94,15 +94,17 @@ func (r *TapeWriter) AddFile(fs afero.Fs, filePath string) error {
 		return NewError(err, fmt.Sprintf("Unable to write header into file %s", filePath))
 	}
 
-	infile, err := fs.Open(filePath)
-	if err != nil {
-		return NewError(err, fmt.Sprintf("Unable to open input file %s", filePath))
-	}
-	defer infile.Close()
+	if !fileInfo.IsDir() {
+		infile, err := fs.Open(filePath)
+		if err != nil {
+			return NewError(err, fmt.Sprintf("Unable to open input file %s", filePath))
+		}
+		defer infile.Close()
 
-	_, err = io.Copy(r.tarWriter, infile)
-	if err != nil {
-		return NewError(err, fmt.Sprintf("Failed to copy data from input file %s to tar writer", filePath))
+		_, err = io.Copy(r.tarWriter, infile)
+		if err != nil {
+			return NewError(err, fmt.Sprintf("Failed to copy data from input file %s to tar writer", filePath))
+		}
 	}
 
 	return nil
@@ -112,7 +114,9 @@ func (r *TapeWriter) AddFile(fs afero.Fs, filePath string) error {
 func (r *TapeWriter) AddDirectory(fs afero.Fs, dirpath string) error {
 	err := afero.Walk(fs, dirpath, func(path string, info os.FileInfo, err error) error {
 		if err == nil {
-			if !info.IsDir() {
+			if info.IsDir() {
+				return fs.MkdirAll(path, info.Mode())
+			} else {
 				return r.AddFile(fs, path)
 			}
 		}

@@ -17,7 +17,7 @@ func ListContents(fs afero.Fs, archive, keystore, pubkey, privkey string, output
 		log.Fatalf("Failed to open archive: %v", err)
 	}
 
-	privateKey, publicKey, err := readKeysFromKeystore(fs, "foo", "test1", "test3")
+	privateKey, publicKey, err := readKeysFromKeystore(fs, keystore, pubkey, privkey)
 	if err != nil {
 		log.Fatalf("Failed to read keys from keystore: %v", err)
 	}
