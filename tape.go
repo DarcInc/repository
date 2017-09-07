@@ -157,18 +157,23 @@ func (r *TapeReader) ExtractFile(fs afero.Fs) error {
 		return NewError(err, "Failed to extract file from repository")
 	}
 
-	file, err := fs.OpenFile(header.Name, os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		return NewError(err, fmt.Sprintf("Failed to open file %s for writing", header.Name))
-	}
-	defer file.Close()
+	if header.FileInfo().IsDir() {
+		fs.MkdirAll(header.Name, header.FileInfo().Mode())
+	} else {
 
-	_, err = io.Copy(file, r.tarReader)
-	if err != nil {
-		return NewError(err, fmt.Sprintf("Failed to extract file %s", header.Name))
+		file, err := fs.OpenFile(header.Name, os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			return NewError(err, fmt.Sprintf("Failed to open file %s for writing", header.Name))
+		}
+		defer file.Close()
+
+		_, err = io.Copy(file, r.tarReader)
+		if err != nil {
+			return NewError(err, fmt.Sprintf("Failed to extract file %s", header.Name))
+		}
+		finfo := header.FileInfo()
+		fs.Chmod(header.Name, finfo.Mode())
 	}
-	finfo := header.FileInfo()
-	fs.Chmod(header.Name, finfo.Mode())
 
 	return nil
 }
@@ -181,8 +186,7 @@ func (r *TapeReader) Contents() ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-
-		result = append(result, fmt.Sprintf("%v %s", header.Mode, header.Name))
+		result = append(result, fmt.Sprintf("%v %s", header.FileInfo().Mode(), header.Name))
 	}
 	return result, nil
 }
