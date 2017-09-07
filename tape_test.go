@@ -3,6 +3,7 @@ package repository
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -344,23 +345,29 @@ func TestAddDirectory(t *testing.T) {
 		t.Fatalf("Unable to open backup tape: %v", err)
 	}
 
-	if err = tr.ExtractFile(fs); err != nil {
-		t.Fatalf("Unable to extract file from archive: %v", err)
+	for {
+		err := tr.ExtractFile(fs)
+		if err != nil && err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			t.Fatalf("Error extracting files: %v", err)
+		}
 	}
 
-	if err = tr.ExtractFile(fs); err != nil {
-		t.Fatalf("Unable to extract file from archive: %v", err)
+	if _, err = fs.Stat(pathFor("data", "db", "files", "db1.dat")); err != nil {
+		t.Errorf("Unable to find restored file: %v", err)
 	}
 
-	//if _, err = fs.Stat(pathFor("data", "db", "files", "db1.dat")); err != nil {
-	//	t.Errorf("Unable to find restored file: %v", err)
-	//}
-
-	//if _, err = fs.Stat(pathFor("data", "db", "files", "db2.dat")); err != nil {
-	//	t.Errorf("Unable to find restored file: %v", err)
-	//}
+	if _, err = fs.Stat(pathFor("data", "db", "files", "db2.dat")); err != nil {
+		t.Errorf("Unable to find restored file: %v", err)
+	}
 }
 
+// Unfortunately this test will not work with Afero.  Either I need
+// to fork Afero and include the desired behavior or take a new
+// approach to mocking the fileystems.
 func xestSavePermissionBits(t *testing.T) {
 	fs := setupFs()
 	file, err := fs.OpenFile(pathFor("backups", "bk1.bak"), os.O_WRONLY|os.O_CREATE, 0600)
