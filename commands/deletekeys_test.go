@@ -50,12 +50,12 @@ func TestBadKeystorePanics(t *testing.T) {
 	}()
 
 	fs := createFSWithKeystore(t)
-	f, err := fs.Create(filepath.Join(repository.HomeDir(), "bad.sqlite"))
+	f, err := fs.Create(filepath.Join(repository.HomeDir(), "bad.keys"))
 	if err != nil {
 		t.Fatalf("Unable to create bad input file")
 	}
 	f.Close()
 
-	DeleteKeys(fs, filepath.Join(repository.HomeDir(), "bad.sqlite"), "test1")
+	DeleteKeys(fs, filepath.Join(repository.HomeDir(), "bad.keys"), "test1")
 	t.Error("Failed to panic with invalid keystore")
 }

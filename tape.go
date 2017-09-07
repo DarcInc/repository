@@ -150,6 +150,8 @@ func OpenTape(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey, tape io.Read
 // ExtractFile reads a file out of the tape and writes it onto the disk.
 // it uses metadata stored about the file to determine the file name
 // and any other characterisitics to set on the created file.
+//
+// TODO: Need to check for and create intermediate directories.
 func (r *TapeReader) ExtractFile(fs afero.Fs) error {
 	header, err := r.tarReader.Next()
 	if err == io.EOF {
@@ -169,6 +171,8 @@ func (r *TapeReader) ExtractFile(fs afero.Fs) error {
 	if err != nil {
 		return NewError(err, fmt.Sprintf("Failed to extract file %s", header.Name))
 	}
+	finfo := header.FileInfo()
+	fs.Chmod(header.Name, finfo.Mode())
 
 	return nil
 }
