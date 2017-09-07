@@ -114,11 +114,7 @@ func (r *TapeWriter) AddFile(fs afero.Fs, filePath string) error {
 func (r *TapeWriter) AddDirectory(fs afero.Fs, dirpath string) error {
 	err := afero.Walk(fs, dirpath, func(path string, info os.FileInfo, err error) error {
 		if err == nil {
-			if info.IsDir() {
-				return fs.MkdirAll(path, info.Mode())
-			} else {
-				return r.AddFile(fs, path)
-			}
+			return r.AddFile(fs, path)
 		}
 		return nil
 	})
@@ -186,7 +182,7 @@ func (r *TapeReader) Contents() ([]string, error) {
 			return nil, err
 		}
 
-		result = append(result, header.Name)
+		result = append(result, fmt.Sprintf("%v %s", header.Mode, header.Name))
 	}
 	return result, nil
 }
