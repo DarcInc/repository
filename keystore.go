@@ -109,6 +109,7 @@ func CreateKeystore(fs afero.Fs, name string) (*Keystore, error) {
 
 // AddPrivateKey adds a private key to the key store with the given name.
 func (k *Keystore) AddPrivateKey(name string, key *rsa.PrivateKey) {
+	log.Printf("Adding private key: %s", name)
 	bytes := x509.MarshalPKCS1PrivateKey(key)
 	k.PrivateKeys[name] = bytes
 }
@@ -156,6 +157,7 @@ func (k *Keystore) FindPublicKey(name string) (*rsa.PublicKey, bool) {
 
 // AddPublicKey to keystore with the given name.
 func (k *Keystore) AddPublicKey(name string, key *rsa.PublicKey) {
+	log.Printf("Adding public key: %s", name)
 	bytes, err := x509.MarshalPKIXPublicKey(key)
 	if err != nil {
 		panic(err)

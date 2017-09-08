@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"io"
+	"log"
 	"os"
 	"strings"
 
@@ -23,7 +24,12 @@ func ImportKey(fs afero.Fs, repoName, keyName, fileName string) error {
 		return err
 	}
 	defer file.Close()
-	return importKey(fs, repoName, keyName, file)
+	err = importKey(fs, repoName, keyName, file)
+	if err != nil {
+		log.Printf("Failed to import public key: %v", err)
+	}
+
+	return err
 }
 
 func importKey(fs afero.Fs, repoName, keyName string, from io.Reader) error {
